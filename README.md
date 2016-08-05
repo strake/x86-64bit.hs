@@ -1,0 +1,11 @@
+# x86-64
+
+The primary goal of x86-64bit is to provide a lightweight assembler for machine generated 64 bit x86 assembly instructions.
+
+Features:
+
+-   The size of operands are statically checked. For example, exchanging @rax@ with @eax@ raises a compile time error rather than a code-generation time error.
+-   Immediate values are automatically converted to smaller size if possible.
+-   De Bruijn indices are used instead of named labels
+-   Quickcheck tests: You can quickcheck your x86 processor! Please report failures, there is a higher chance that the error is this library rather than in your processor.
+
