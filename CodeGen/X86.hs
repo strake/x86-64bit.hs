@@ -38,6 +38,7 @@ module CodeGen.X86
     -- * Assembly codes
     , Code (..)
     -- * Compound assembly codes
+    , (<>)
     , (<.>), (<:>)
     , j, j_back, if_
     , leaData
@@ -55,6 +56,8 @@ module CodeGen.X86
     , memalign
     , printf
     ) where
+
+import Data.Monoid
 
 import CodeGen.X86.Asm
 import CodeGen.X86.CodeGen

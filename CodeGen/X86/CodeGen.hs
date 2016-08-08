@@ -251,8 +251,8 @@ mkCodeBuilder' = \case
 
     Data cs -> CodeBuilder $ \(n, labs) -> (Right <$> zip [n..] (getBytes cs), (n + bytesCount cs, labs))
     Align s -> CodeBuilder $ \(n, labs) -> let
-                    j = fromIntegral $ (fromIntegral n - 1 :: Int64) .|. f s + 1
-                in (Right <$> zip [n..] (replicate j 0x90), (n + j, labs))
+                    n' = fromIntegral $ (fromIntegral n - 1 :: Int64) .|. f s + 1
+                in (Right <$> zip [n..] (replicate (n' - n) 0x90), (n', labs))
       where
         f s = sizeLen s - 1
   where
