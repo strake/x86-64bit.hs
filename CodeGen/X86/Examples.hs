@@ -1,12 +1,6 @@
 {-# language BangPatterns #-}
-{-# language NoMonomorphismRestriction #-}
-{-# language ScopedTypeVariables #-}
-{-# language DataKinds #-}
 module CodeGen.X86.Examples where
 
-import Data.Char
-import Data.Monoid
-import Control.Monad
 import Foreign
 
 import CodeGen.X86
