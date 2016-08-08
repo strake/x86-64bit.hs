@@ -13,6 +13,11 @@ import CodeGen.X86
 
 ------------------------------------------------------------------------------ examples
 
+-- | Example: identity function in Assembly (look at the source code)
+--
+-- Input: @rdi@
+--
+-- Output: @rax@
 idCode
     =  Mov rax rdi
     <> Ret
@@ -20,6 +25,7 @@ idCode
 idFun :: Word64 -> Word64
 idFun = compile idCode 
 
+-- | Example: Fibonacci function in Assembly
 fibCode
     =  Inc rdi
     <> Xor rdx rdx
@@ -30,6 +36,7 @@ fibCode
 fibFun :: Word64 -> Word64
 fibFun = compile fibCode 
 
+-- | Example: trace a register in Assembly
 tracedFibCode
     =  Inc rdi
     <> Xor rdx rdx
@@ -40,6 +47,7 @@ tracedFibCode
 tracedFibFun :: Word64 -> Word64
 tracedFibFun = compile tracedFibCode 
 
+-- | Example: call Haskell @fib@ function from Assembly
 callHsCode
     =  callFun rdx (hsPtr fib)
     <> Ret
@@ -53,6 +61,7 @@ fib n = go n 0 1
 callHsFun :: Word64 -> Word64
 callHsFun = compile callHsCode 
 
+-- | Example: call C @printf@ function from Assembly
 callCCode name
     =  leaData rdi (CString "Hello %s!\n")
     <> leaData rsi (CString name)
