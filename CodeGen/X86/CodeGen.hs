@@ -17,6 +17,7 @@
 module CodeGen.X86.CodeGen where
 
 import Numeric
+import Data.Maybe
 import Data.Monoid
 import qualified Data.Vector as V
 import Data.Bits
@@ -336,16 +337,11 @@ mkCodeBuilder' = \case
         rc IPMemOp{} = 0x05
         rc (RegOp r) = reg8_ r
 
-    notA8 dest@RegA = False
-    notA8 dest = size dest == S8
-
     op2 :: IsSize s => Word8 -> Operand s RW -> Operand s k -> CodeBuilder
-    op2 op dest@(notA8 -> True) (mkImmS S8 -> FJust (_, im))
-        = regprefix'' dest 0x40 (reg8 op dest) im
-    op2 op dest@RegA (mkImmNo64 (size dest) -> FJust (_, im))
+    op2 op dest@RegA src@(mkImmNo64 (size dest) -> FJust (_, im)) | size dest == S8 || isNothing (getFirst $ mkImmS S8 src)
         = regprefix'' dest (op `shiftL` 2 .|. 0x2) mempty im
     op2 op dest (mkImmS S8 <> mkImmNo64 (size dest) -> FJust ((_, k), im))
-        = regprefix'' dest (0x40 .|. indicator (k == S8)) (reg8 op dest) im
+        = regprefix'' dest (0x40 .|. indicator (size dest /= S8 && k == S8)) (reg8 op dest) im
     op2 op dest src = op2' (op `shiftL` 2) dest $ noImm "1" src
 
     noImm :: String -> Operand s k -> Operand s RW
