@@ -2,6 +2,7 @@
 {-# language NoMonomorphismRestriction #-}
 {-# language ScopedTypeVariables #-}
 {-# language DataKinds #-}
+{-# language ForeignFunctionInterface #-}
 module CodeGen.X86.Utils where
 
 import Data.Char
