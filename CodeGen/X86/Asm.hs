@@ -532,20 +532,3 @@ showOp s a = showOp0 $ s ++ " " ++ a
 showOp1 s a = getLabels >>= \f -> showOp s $ showOperand f a
 showOp2 s a b = getLabels >>= \f -> showOp s $ showOperand f a ++ ", " ++ showOperand f b
 
--------------------------------------------------------------- derived constructs
-
-(<.>) :: Code -> Code -> Code
-a <.> b = a <> Label <> b
-
-a <:> b = Scope $ a <.> b
-
-infixr 5 <:>, <.>
-
-j c x = J c <> Up x <:> mempty
-
-x `j_back` c = mempty <:> Up x <> J c
-
-if_ c a b = (J c <> Up (Up a <> Jmp) <:> mempty) <> Up b <:> mempty
-
-leaData r d = (Lea r (ipBase :: Operand S8 RW) <> Up Jmp <:> mempty) <> Data (toBytes d) <:> mempty
-

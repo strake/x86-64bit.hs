@@ -44,16 +44,21 @@ module CodeGen.X86
     -- * Compilation
     , Callable
     , compile
-    -- * Calling Haskell from Assembly
+    -- * Calling C and Haskell from Assembly
+    , callFun
     , CallableHs
     , hsPtr
     -- * Misc
     , runTests
+    , CString (..)
+    , traceReg
     , memalign
+    , printf
     ) where
 
 import CodeGen.X86.Asm
 import CodeGen.X86.CodeGen
 import CodeGen.X86.FFI
+import CodeGen.X86.Utils
 import CodeGen.X86.Tests
 

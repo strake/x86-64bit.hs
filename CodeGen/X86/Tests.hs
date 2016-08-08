@@ -15,7 +15,7 @@
 {-# language FlexibleInstances #-}
 {-# language GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE TemplateHaskell #-}
-module CodeGen.X86.Tests (tests, runTests) where
+module CodeGen.X86.Tests (runTests) where
 
 import Data.Monoid
 import Data.Maybe
@@ -30,6 +30,7 @@ import Debug.Trace
 import CodeGen.X86.Asm
 import CodeGen.X86.CodeGen
 import CodeGen.X86.FFI
+import CodeGen.X86.Utils
 
 ------------------------------------------------------------------------------
 
@@ -386,6 +387,8 @@ tests num = quickCheckWith stdArgs { maxSuccess = num } propInstr
 -----------------------------------------
 
 return []
+
+-- | Run all tests
 runTests = do
     $quickCheckAll
     tests 2000
