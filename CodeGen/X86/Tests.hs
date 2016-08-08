@@ -381,10 +381,12 @@ instance Arbitrary InstrTest where
 
 propInstr (IT _ c) = compile c :: Bool
 
-tests = quickCheckWith stdArgs { maxSuccess = 2000 } propInstr
+tests num = quickCheckWith stdArgs { maxSuccess = num } propInstr
 
 -----------------------------------------
 
 return []
-runTests = $quickCheckAll
+runTests = do
+    $quickCheckAll
+    tests 2000
 

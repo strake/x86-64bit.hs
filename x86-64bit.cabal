@@ -32,12 +32,12 @@ source-repository head
 library
   exposed-modules:
     CodeGen.X86
-    CodeGen.X86.Tests
     CodeGen.X86.Examples
   other-modules:
     CodeGen.X86.Asm
     CodeGen.X86.CodeGen
     CodeGen.X86.FFI
+    CodeGen.X86.Tests
   other-extensions:
     NoMonomorphismRestriction
     LambdaCase

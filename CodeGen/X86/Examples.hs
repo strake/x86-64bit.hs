@@ -96,5 +96,5 @@ memTestFun :: Word64 -> IO Bool
 memTestFun v = do
     r <- memalign 8 8
     pokeByteOff r 0 (v :: Word64)
-    return $ compile (Mov rax (MemOp $ base rdi) <> Ret) r == v
+    return $ compile (Mov rax (addr $ base rdi) <> Ret) r == v
 

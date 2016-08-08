@@ -41,7 +41,7 @@ showByte b = [showNibble 1 b, showNibble 0 b]
 
 showHex' x = "0x" ++ showHex x ""
 
-------------------------------------------------------- bytes
+------------------------------------------------------- byte sequences
 
 newtype Bytes = Bytes {getBytes :: [Word8]}
     deriving (Eq, Monoid)
@@ -67,7 +67,7 @@ instance HasBytes Int16 where toBytes w = toBytes (fromIntegral w :: Word16)
 instance HasBytes Int32 where toBytes w = toBytes (fromIntegral w :: Word32)
 instance HasBytes Int64 where toBytes w = toBytes (fromIntegral w :: Word64)
 
-------------------------------------------------------- size
+------------------------------------------------------- sizes
 
 data Size = S8 | S16 | S32 | S64
     deriving (Eq, Ord)
@@ -101,7 +101,7 @@ instance HasSize Int16  where size _ = S16
 instance HasSize Int32  where size _ = S32
 instance HasSize Int64  where size _ = S64
 
--- singleton type for size
+-- | Singleton type for size
 data SSize (s :: Size) where
     SSize8  :: SSize S8
     SSize16 :: SSize S16
@@ -159,13 +159,18 @@ data Operand :: Size -> Access -> * where
     MemOp     :: IsSize s' => Addr s' -> Operand s rw
     IPMemOp   :: Immediate Int32 -> Operand s rw
 
+addr = MemOp
+
 data Immediate a
     = Immediate a
     | LabelRelAddr !LabelIndex
 
 type LabelIndex = Int
 
-data Access = R | RW
+-- | Operand access modes
+data Access
+    = R     -- ^ readable operand
+    | RW    -- ^ readable and writeable operand
 
 data Reg :: Size -> * where
     NormalReg :: Word8 -> Reg s
