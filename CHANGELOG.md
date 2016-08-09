@@ -1,3 +1,9 @@
+# Version 0.1.2
+
+-   Windows operating system support
+-   GHC 7.10 support
+-   TODO.md file added
+
 # Version 0.1.1.1
 
 -   change dependencies to reflect that the package compiles only with ghc 8
