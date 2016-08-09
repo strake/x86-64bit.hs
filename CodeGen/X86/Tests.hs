@@ -295,7 +295,7 @@ instance Arbitrary InstrTest where
                         <> initab (initcf <> cc <> mova) <> mkRes
                         <> Mov rsp f1 {- <> traceReg "X" rdx' -} <> foldMap Pop (reverse sr) <> Ret
 
-                    sr = [rbx, rbp, r12, r13, r14, r15]
+                    sr = [rsi, rdi, rbx, rbp, r12, r13, r14, r15]
 
                     cc = i
                     initcf = if cF then Stc else Clc
