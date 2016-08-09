@@ -1,7 +1,8 @@
 
-# Support for more instructions
+# Support more instructions
 
 -   pusha / popa
+-   long conditional jump
 
 # Possible renaming
 
