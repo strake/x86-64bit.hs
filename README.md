@@ -9,3 +9,5 @@ Features:
 -   De Bruijn indices are used instead of named labels
 -   Quickcheck tests: You can quickcheck your x86 processor! Please report failures, there is a higher chance that the error is in this library rather than in your processor.
 
+The package is available on HackageDB: http://hackage.haskell.org/package/x86-64bit
+
