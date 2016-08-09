@@ -14,6 +14,7 @@ stability:           Experimental
 tested-with:         GHC == 8.0.1
 extra-source-files:  README.md
                      CHANGELOG.md
+                     TODO.md
 
 source-repository head
   type:     git
