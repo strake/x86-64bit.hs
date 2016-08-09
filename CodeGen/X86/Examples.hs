@@ -5,7 +5,6 @@ module CodeGen.X86.Examples where
 import Foreign
 
 import CodeGen.X86
-import CodeGen.X86.CallConv
 
 ------------------------------------------------------------------------------ 
 -- * examples

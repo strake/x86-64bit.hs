@@ -23,12 +23,12 @@ library
   exposed-modules:
     CodeGen.X86
     CodeGen.X86.Examples
+  other-modules:
     CodeGen.X86.Asm
     CodeGen.X86.CodeGen
     CodeGen.X86.CallConv
     CodeGen.X86.FFI
     CodeGen.X86.Utils
-  other-modules:
     CodeGen.X86.Tests
 
   other-extensions:

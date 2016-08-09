@@ -50,6 +50,7 @@ module CodeGen.X86
     , callFun
     , saveNonVolatile
     , arg1, arg2, arg3, arg4
+    , result
     , CallableHs
     , hsPtr
     -- * Misc
