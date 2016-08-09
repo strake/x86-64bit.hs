@@ -99,7 +99,9 @@ no64 s = s
 
 ------------------------------------------------------- code builder
 
-newtype CodeBuilder = CodeBuilder {buildCode :: CodeBuilderState -> ([Either Int (Int, Word8)], CodeBuilderState)}
+newtype CodeBuilder = CodeBuilder {buildCode :: CodeBuilderState -> (CodeBuilderRes, CodeBuilderState)}
+
+type CodeBuilderRes = [Either Int (Int, Word8)]
 
 type CodeBuilderState = (Int, [Either [(Size, Int, Int)] Int])
 
@@ -239,6 +241,7 @@ mkCodeBuilder' = \case
 
     Label -> CodeBuilder lab
       where
+        lab :: CodeBuilderState -> (CodeBuilderRes, CodeBuilderState)
         lab (n, labs) = (Right <$> concatMap g corr, (n, labs'))
           where
             (corr, labs') = replL (Right n) labs
@@ -255,14 +258,20 @@ mkCodeBuilder' = \case
                     n' = fromIntegral $ (fromIntegral n - 1 :: Int64) .|. f s + 1
                 in (Right <$> zip [n..] (replicate (n' - n) 0x90), (n', labs))
       where
+        f :: Size -> Int64
         f s = sizeLen s - 1
   where
+    xchg_a :: IsSize s => Operand s a -> CodeBuilder
     xchg_a dest@(RegOp r) | size dest /= S8 = regprefix (size dest) dest (oneReg 0x12 r) mempty
     xchg_a dest = regprefix'' dest 0x43 (reg8 0x0 dest) mempty
 
+    bytesToCode :: Bytes -> CodeBuilder
     bytesToCode = mkCodeBuilder' . Data
+
+    toCode :: HasBytes a => a -> CodeBuilder
     toCode = bytesToCode . toBytes
 
+    sizePrefix_ :: [SReg] -> Size -> Operand s a -> Word8 -> CodeBuilder -> Bytes -> CodeBuilder
     sizePrefix_ rs s r x c im
         | noHighRex rs = pre <> c <> displacement r <> bytesToCode im
         | otherwise = error "cannot use high register in rex instruction"
@@ -300,14 +309,20 @@ mkCodeBuilder' = \case
             dispVal (Just (reg8_ -> 0x5)) _ = codeByte 0      -- [rbp] --> [rbp + 0]
             dispVal _ _ = mempty
 
+    reg8_ :: Reg t -> Word8
     reg8_ (NormalReg r) = r .&. 0x7
     reg8_ (HighReg r) = r .|. 0x4
 
+    regprefix :: IsSize s => Size -> Operand s a -> CodeBuilder -> Bytes -> CodeBuilder
     regprefix s r c im = sizePrefix_ (regs r) s r (extbits r) c im
+
+    regprefix2 :: (IsSize s1, IsSize s) => Operand s1 a1 -> Operand s a -> Word8 -> CodeBuilder -> CodeBuilder
     regprefix2 r r' p c = sizePrefix_ (regs r <> regs r') (size r) r (extbits r' `shiftL` 2 .|. extbits r) (extension r p <> c) mempty
 
+    regprefix'' :: IsSize s => Operand s a -> Word8 -> CodeBuilder -> Bytes -> CodeBuilder
     regprefix'' r p c = regprefix (size r) r $ extension r p <> c
 
+    extension :: HasSize a => a -> Word8 -> CodeBuilder
     extension x p = codeByte $ p `shiftL` 1 .|. indicator (size x /= S8)
 
     extbits :: Operand s a -> Word8
@@ -354,10 +369,13 @@ mkCodeBuilder' = \case
     op2' op dest src@RegOp{} = op2g op dest src
     op2' op dest@RegOp{} src = op2g (op .|. 0x1) src dest
 
+    op2g :: (IsSize t, IsSize s) => Word8 -> Operand s a1 -> Operand t a -> CodeBuilder
     op2g op dest src@(RegOp r) = regprefix2 dest src op $ reg8 (reg8_ r) dest
 
+    op1_ :: IsSize s => Word8 -> Word8 -> Operand s a -> Bytes -> CodeBuilder
     op1_ r1 r2 dest im = regprefix'' dest r1 (reg8 r2 dest) im
 
+    op1 :: IsSize s => Word8 -> Word8 -> Operand s a -> CodeBuilder
     op1 a b c = op1_ a b c mempty
 
     op1' :: Word8 -> Word8 -> Operand S64 RW -> CodeBuilder
@@ -369,5 +387,6 @@ mkCodeBuilder' = \case
     shiftOp c dest RegCl = op1 0x69 c dest
     shiftOp _ _ _ = error "invalid shift operands"
 
+    oneReg :: Word8 -> Reg t -> CodeBuilder
     oneReg x r = codeByte $ x `shiftL` 3 .|. reg8_ r
 
