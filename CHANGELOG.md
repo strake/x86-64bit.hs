@@ -1,3 +1,7 @@
+# Version 0.1.1.1
+
+-   add 'tested-with: GHC == 8.0.1' to the cabal file
+
 # Version 0.1.1
 
 -   examples moved into the library
