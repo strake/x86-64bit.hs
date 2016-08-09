@@ -121,8 +121,12 @@ mkRef s sc bs = CodeBuilder f
           where
             vx = i - n - sc
             z = getBytes $ case s of
-                S8  -> toBytes (fromIntegral vx :: Int8)
-                S32 -> toBytes (fromIntegral vx :: Int32)
+                S8  -> case vx of
+                    Integral j -> toBytes (j :: Int8)
+                    _ -> error $ show vx ++ " does not fit into an Int8"
+                S32  -> case vx of
+                    Integral j -> toBytes (j :: Int32)
+                    _ -> error $ show vx ++ " does not fit into an Int32"
         Left cs -> (mempty, (n + sizeLen s, labs'))
           where
             labs' = take bs labs ++ Left ((s, n, - n - sc): cs): drop (bs + 1) labs
