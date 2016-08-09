@@ -217,7 +217,7 @@ mkCodeBuilder' = \case
     Inc  a -> op1 0x7f 0x0 a
     Dec  a -> op1 0x7f 0x1 a
     Call a -> op1' 0xff 0x2 a
-    Goto a -> op1' 0xff 0x4 a
+    Jmpq a -> op1' 0xff 0x4 a
 
     Pop dest@(RegOp r) -> regprefix S32 dest (oneReg 0x0b r) mempty
     Pop dest -> regprefix S32 dest (codeByte 0x8f <> reg8 0x0 dest) mempty

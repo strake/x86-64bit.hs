@@ -441,7 +441,7 @@ data Code where
     Push :: Operand S64 r  -> Code
 
     Call :: Operand S64 RW -> Code
-    Goto :: Operand S64 RW -> Code
+    Jmpq :: Operand S64 RW -> Code
 
     J    :: Condition -> Code
     Jmp  :: Code
@@ -513,7 +513,7 @@ showCodeFrag = \case
     Pop  op -> showOp1 "pop"  op
     Push op -> showOp1 "push" op
     Call op -> showOp1 "call" op
-    Goto op -> showOp1' "jmpq" op
+    Jmpq op -> showOp1' "jmpq" op
     Ret   -> showOp0 "ret"
     Nop   -> showOp0 "nop"
     PushF -> showOp0 "pushf"
