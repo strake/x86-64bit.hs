@@ -1,8 +1,11 @@
+{-# language CPP #-}
 {-# language ForeignFunctionInterface #-}
 {-# language BangPatterns #-}
 {-# language ViewPatterns #-}
 {-# language FlexibleInstances #-}
 module CodeGen.X86.FFI where
+
+-------------------------------------------------------
 
 import Control.Monad
 import Control.Exception (evaluate)
@@ -14,6 +17,18 @@ import System.IO.Unsafe
 
 import CodeGen.X86.Asm
 import CodeGen.X86.CodeGen
+
+-------------------------------------------------------
+
+#define PAGE_SIZE 4096
+
+#if defined (mingw32_HOST_OS) || defined (mingw64_HOST_OS) 
+
+import System.Win32.Types
+import System.Win32.Mem
+import Foreign.Marshal.Alloc
+
+#endif
 
 -------------------------------------------------------
 
@@ -46,18 +61,49 @@ instance Callable (Ptr a -> Word64)     where unsafeCallForeignPtr = unsafeCallF
 
 -------------------------------------------------------
 
+#if defined (mingw32_HOST_OS) || defined (mingw64_HOST_OS) 
+-- note: GHC 64 bit also defines mingw32 ...
+
+foreign import ccall "static malloc.h  _aligned_malloc" c_aligned_malloc :: CSize -> CSize -> IO (Ptr a)
+foreign import ccall "static malloc.h  _aligned_free"   c_aligned_free   :: Ptr a -> IO ()
+foreign import ccall "static malloc.h &_aligned_free"   ptr_aligned_free :: FunPtr (Ptr a -> IO ())
+
+#elif defined linux_HOST_OS
+
 foreign import ccall "static stdlib.h memalign"   memalign :: CUInt -> CUInt -> IO (Ptr a)
 foreign import ccall "static stdlib.h &free"      stdfree  :: FunPtr (Ptr a -> IO ())
 foreign import ccall "static sys/mman.h mprotect" mprotect :: Ptr a -> CUInt -> Int -> IO Int
+
+#endif
+
+-------------------------------------------------------
+
+#if defined (mingw32_HOST_OS) || defined (mingw64_HOST_OS) 
+
+flag_PAGE_EXECUTE_READWRITE :: Word32
+flag_PAGE_EXECUTE_READWRITE = 0x40 
 
 {-# NOINLINE compile #-}
 compile :: Callable a => Code -> a
 compile x = unsafeCallForeignPtr $ unsafePerformIO $ do
     let (bytes, fromIntegral -> size) = buildTheCode x
-    arr <- memalign 0x1000 size
+    arr <- c_aligned_malloc (fromIntegral size) PAGE_SIZE
+    _ <- virtualProtect (castPtr arr) (fromIntegral size) flag_PAGE_EXECUTE_READWRITE
+    forM_ [p | Right p <- bytes] $ uncurry $ pokeByteOff arr    
+    newForeignPtr ptr_aligned_free arr 
+
+#elif defined linux_HOST_OS
+
+{-# NOINLINE compile #-}
+compile :: Callable a => Code -> a
+compile x = unsafeCallForeignPtr $ unsafePerformIO $ do
+    let (bytes, fromIntegral -> size) = buildTheCode x
+    arr <- memalign PAGE_SIZE size
     _ <- mprotect arr size 0x7 -- READ, WRITE, EXEC
     forM_ [p | Right p <- bytes] $ uncurry $ pokeByteOff arr
     newForeignPtr stdfree arr
+
+#endif
 
 -------------------------------------------------------
 

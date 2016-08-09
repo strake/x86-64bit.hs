@@ -1,3 +1,4 @@
+{-# language CPP #-}
 {-# language PatternSynonyms #-}
 module CodeGen.X86
     (
@@ -47,13 +48,17 @@ module CodeGen.X86
     , compile
     -- * Calling C and Haskell from Assembly
     , callFun
+    , saveNonVolatile
+    , arg1, arg2, arg3, arg4
     , CallableHs
     , hsPtr
     -- * Misc
     , runTests
     , CString (..)
     , traceReg
+#ifdef linux_HOST_OS
     , memalign
+#endif
     , printf
     ) where
 
@@ -62,6 +67,7 @@ import Data.Monoid
 import CodeGen.X86.Asm
 import CodeGen.X86.CodeGen
 import CodeGen.X86.FFI
+import CodeGen.X86.CallConv
 import CodeGen.X86.Utils
 import CodeGen.X86.Tests
 
