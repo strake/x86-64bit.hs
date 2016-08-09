@@ -1,5 +1,6 @@
 # Version 0.1.1.1
 
+-   change dependencies to reflect that the package compiles only with ghc 8
 -   add 'tested-with: GHC == 8.0.1' to the cabal file
 
 # Version 0.1.1

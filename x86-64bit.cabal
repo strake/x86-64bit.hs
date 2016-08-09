@@ -50,7 +50,7 @@ library
     ScopedTypeVariables
 
   build-depends:
-    base >=4.7 && <4.10,
+    base >=4.9 && <4.10,
     monads-tf >=0.1 && <0.2,
     vector >=0.11 && <0.12,
     QuickCheck >=2.8 && <2.10
@@ -61,7 +61,7 @@ test-suite test-x86-64bit
   type:       exitcode-stdio-1.0
   main-is:    Test.hs
   build-depends:
-    base >=4.7 && <4.10,
+    base >=4.9 && <4.10,
     monads-tf >=0.1 && <0.2,
     vector >=0.11 && <0.12,
     QuickCheck >=2.8 && <2.10
