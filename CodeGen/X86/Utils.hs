@@ -74,9 +74,9 @@ pop_all  = mconcat [ Pop  r | r <- reverse all_regs_except_rsp ]
 
 traceReg :: IsSize s => String -> Operand s RW -> Code
 traceReg d r = 
-       push_all
+       PushF <> push_all
     <> mov' arg2 r <> leaData arg1 (CString $ show r ++ " = %" ++ s ++ d ++ "\n") <> Xor rax rax <> callFun r11 printf
-    <> pop_all
+    <> pop_all <> PopF
   where
     s = case size r of
         S8  -> "hh"
