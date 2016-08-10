@@ -394,20 +394,28 @@ newtype Condition = Condition Word8
 
 pattern O   = Condition 0x0
 pattern NO  = Condition 0x1
-pattern C   = Condition 0x2      -- b
-pattern NC  = Condition 0x3      -- nb
-pattern Z   = Condition 0x4      -- e
-pattern NZ  = Condition 0x5      -- ne
-pattern BE  = Condition 0x6      -- na
-pattern NBE = Condition 0x7      -- a
+pattern B   = Condition 0x2
+pattern C   = Condition 0x2
+pattern NB  = Condition 0x3
+pattern NC  = Condition 0x3
+pattern E   = Condition 0x4
+pattern Z   = Condition 0x4
+pattern NE  = Condition 0x5
+pattern NZ  = Condition 0x5
+pattern NA  = Condition 0x6
+pattern BE  = Condition 0x6
+pattern A   = Condition 0x7
+pattern NBE = Condition 0x7
 pattern S   = Condition 0x8
 pattern NS  = Condition 0x9
 pattern P   = Condition 0xa
 pattern NP  = Condition 0xb
 pattern L   = Condition 0xc
 pattern NL  = Condition 0xd
-pattern LE  = Condition 0xe      -- ng
-pattern NLE = Condition 0xf      -- g
+pattern NG  = Condition 0xe
+pattern LE  = Condition 0xe
+pattern G   = Condition 0xf
+pattern NLE = Condition 0xf
 
 instance Show Condition where
     show (Condition x) = case x of
