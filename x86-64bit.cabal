@@ -46,6 +46,7 @@ library
     DeriveFunctor
     DeriveFoldable
     DeriveTraversable
+    DataKinds
     GeneralizedNewtypeDeriving
     OverloadedStrings
     TupleSections

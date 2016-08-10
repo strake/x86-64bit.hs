@@ -42,6 +42,7 @@ module CodeGen.X86
     , (<>)
     , (<.>), (<:>)
     , j, j_back, if_
+    , lea8
     , leaData
     -- * Compilation
     , Callable

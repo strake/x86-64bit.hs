@@ -31,7 +31,10 @@ x `j_back` c = mempty <:> Up x <> J c
 
 if_ c a b = (J c <> Up (Up a <> Jmp) <:> mempty) <> Up b <:> mempty
 
-leaData r d = (Lea r (ipBase :: Operand S8 RW) <> Up Jmp <:> mempty) <> Data (toBytes d) <:> mempty
+lea8 :: IsSize s => Operand s RW -> Operand S8 RW -> Code
+lea8 = Lea
+
+leaData r d = (lea8 r ipBase <> Up Jmp <:> mempty) <> Data (toBytes d) <:> mempty
 
 ------------------------------------------------------------------------------ 
 
