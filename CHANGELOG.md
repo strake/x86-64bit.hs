@@ -1,6 +1,16 @@
+# Version 0.1.3
+
+-   jmpq instruction support (George Stelle)
+-   support near conditional jumps
+-   support automatic decision between short and near conditional jumps for backward references
+-   support alternative condition names
+-   make possible to use labels as relative immediate values (not used yet)
+-   bugfix
+    -   fail if a short jump is out of range
+
 # Version 0.1.2
 
--   Windows operating system support
+-   Windows operating system support (Balázs Kőműves)
 -   GHC 7.10 support
 -   TODO.md file added
 
