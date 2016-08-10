@@ -513,7 +513,7 @@ showCodeFrag = \case
     Pop  op -> showOp1 "pop"  op
     Push op -> showOp1 "push" op
     Call op -> showOp1 "call" op
-    Jmpq op -> showOp1' "jmpq" op
+    Jmpq op -> showOp1 "jmp"  op
     Ret   -> showOp0 "ret"
     Nop   -> showOp0 "nop"
     PushF -> showOp0 "pushf"
@@ -531,8 +531,6 @@ showCodeFrag = \case
 
 showOp0 s = codeLine s
 showOp s a = showOp0 $ s ++ " " ++ a
-showOp' s a = showOp0 $ s ++ " *" ++ a
 showOp1 s a = getLabels >>= \f -> showOp s $ showOperand f a
-showOp1' s a = getLabels >>= \f -> showOp' s $ showOperand f a
 showOp2 s a b = getLabels >>= \f -> showOp s $ showOperand f a ++ ", " ++ showOperand f b
 
