@@ -248,7 +248,8 @@ mkCodeBuilder' = \case
     Cld   -> codeByte 0xfc
     Std   -> codeByte 0xfd
 
-    J (Condition c) -> codeByte (0x70 .|. c) <> mkRef S8 1 0
+    J S8  (Condition c) -> codeByte (0x70 .|. c) <> mkRef S8 1 0
+    J S32 (Condition c) -> codeByte 0x0f <> codeByte (0x80 .|. c) <> mkRef S32 4 0
 
     -- short jump
     Jmp -> codeByte 0xeb <> mkRef S8 1 0

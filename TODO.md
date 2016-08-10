@@ -1,7 +1,6 @@
 
 # Support more instructions
 
--   long conditional jump
 -   pusha / popa ?
 
 # Possible renaming
@@ -11,6 +10,7 @@
 -   compile -> compileAndRun
 -   codeBytes -> compile
 -   Bytes -> MachineCode ?
+-   Data -> DB
 
 # Documentation
 

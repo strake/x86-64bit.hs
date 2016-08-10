@@ -25,11 +25,18 @@ a <:> b = Scope $ a <.> b
 
 infixr 5 <:>, <.>
 
-j c x = J c <> Up x <:> mempty
+-- | short conditional forward jump
+j c x = J S8 c <> Up x <:> mempty
 
-x `j_back` c = mempty <:> Up x <> J c
+-- | near conditional forward jump
+j32 c x = J S32 c <> Up x <:> mempty
 
-if_ c a b = (J c <> Up (Up a <> Jmp) <:> mempty) <> Up b <:> mempty
+x `j_back` c = mempty <:> Up x <> J S8 c
+
+-- | near conditional backward jump
+x `j_back32` c = mempty <:> Up x <> J S32 c
+
+if_ c a b = (J S8 c <> Up (Up a <> Jmp) <:> mempty) <> Up b <:> mempty
 
 lea8 :: IsSize s => Operand s RW -> Operand S8 RW -> Code
 lea8 = Lea

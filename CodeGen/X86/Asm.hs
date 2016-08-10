@@ -446,7 +446,7 @@ data Code where
     Call :: Operand S64 RW -> Code
     Jmpq :: Operand S64 RW -> Code
 
-    J    :: Condition -> Code
+    J    :: Size -> Condition -> Code
     Jmp  :: Code
 
     Label :: Code
@@ -473,7 +473,7 @@ showCode = \case
 
     Up c -> local tail $ showCode c
 
-    J cc  -> getLabel 0 >>= \l -> showOp ("j" ++ show cc) l
+    J s cc -> getLabel 0 >>= \l -> showOp ("j" ++ show cc) $ (case s of S8 -> "short"; S32 -> "near") ++ " " ++ l
     Jmp   -> getLabel 0 >>= \l -> showOp "jmp" l
     Label -> getLabel 0 >>= codeLine
 
