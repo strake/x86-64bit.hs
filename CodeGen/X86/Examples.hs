@@ -1,5 +1,3 @@
-{-# language CPP #-}
-{-# language BangPatterns #-}
 module CodeGen.X86.Examples where
 
 import Foreign
@@ -51,7 +49,7 @@ callHsCode
 fib :: Word64 -> Word64
 fib n = go n 0 1
   where
-    go 0 !a !b = a
+    go 0 a b = b `seq` a
     go n a b = go (n-1) b (a+b)
 
 callHsFun :: Word64 -> Word64
