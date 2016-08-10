@@ -47,6 +47,16 @@ pattern FNothing = First Nothing
 
 pattern Integral xs <- (toIntegralSized -> Just xs)
 
+integralToBytes :: (Bits a, Integral a) => Bool{-signed-} -> Size -> a -> Maybe Bytes
+integralToBytes False S64 w = toBytes <$> (toIntegralSized w :: Maybe Word64)
+integralToBytes False S32 w = toBytes <$> (toIntegralSized w :: Maybe Word32)
+integralToBytes False S16 w = toBytes <$> (toIntegralSized w :: Maybe Word16)
+integralToBytes False S8  w = toBytes <$> (toIntegralSized w :: Maybe Word8)
+integralToBytes True  S64 w = toBytes <$> (toIntegralSized w :: Maybe Int64)
+integralToBytes True  S32 w = toBytes <$> (toIntegralSized w :: Maybe Int32)
+integralToBytes True  S16 w = toBytes <$> (toIntegralSized w :: Maybe Int16)
+integralToBytes True  S8  w = toBytes <$> (toIntegralSized w :: Maybe Int8)
+
 ------------------------------------------------------- register packed with its size
 
 data SReg where
@@ -70,56 +80,52 @@ isRex _ = False
 
 noHighRex r = not $ any isHigh r && any isRex r
 
-------------------------------------------------------- immediate value size conversion
-
-convertImm :: Bool{-sign extend-} -> Size -> Operand s k -> First ((Bool, Size), Bytes)
-convertImm a b c = (,) (a, b) <$> g a b c
-  where
-    g :: Bool -> Size -> Operand s k -> First Bytes
-    g False S64 (ImmOp w) = toBytes <$> (f w :: First Word64)
-    g False S32 (ImmOp w) = toBytes <$> (f w :: First Word32)
-    g False S16 (ImmOp w) = toBytes <$> (f w :: First Word16)
-    g False S8  (ImmOp w) = toBytes <$> (f w :: First Word8)
-    g True  S64 (ImmOp w) = toBytes <$> (f w :: First Int64)
-    g True  S32 (ImmOp w) = toBytes <$> (f w :: First Int32)
-    g True  S16 (ImmOp w) = toBytes <$> (f w :: First Int16)
-    g True  S8  (ImmOp w) = toBytes <$> (f w :: First Int8)
-    g _ _ _ = FNothing
-
-    f = First . toIntegralSized
-
-
-mkImmS = convertImm True
-mkImm = convertImm False
-
-mkImmNo64 s = mkImmS (no64 s)
-
 no64 S64 = S32
 no64 s = s
 
 ------------------------------------------------------- code builder
 
-newtype CodeBuilder = CodeBuilder {buildCode :: CodeBuilderState -> (CodeBuilderRes, CodeBuilderState)}
+data CodeBuilder
+    = CodeBuilder (CodeBuilderState -> (CodeBuilderRes, CodeBuilderState))
+    | ExactCodeBuilder Int (CodeBuilderState -> (CodeBuilderRes, LabelState))   -- ^ CodeBuilder with known length
+
+codeBuilderLength (ExactCodeBuilder len _) = len
+
+buildCode :: CodeBuilder -> CodeBuilderState -> (CodeBuilderRes, CodeBuilderState)
+buildCode (CodeBuilder f) st = f st
+buildCode (ExactCodeBuilder len f) (n, st) = second ((,) (n + len)) $ f (n, st)
+
+mapLabelState g (CodeBuilder f) = CodeBuilder $ \(n, g -> (fx, xs)) -> second (second fx) $ f (n, xs)
+mapLabelState g (ExactCodeBuilder len f) = ExactCodeBuilder len $ \(n, g -> (fx, xs)) -> second fx $ f (n, xs)
+
+censorCodeBuilder g (CodeBuilder f) = CodeBuilder $ \st -> first (g st) $ f st
+censorCodeBuilder g (ExactCodeBuilder len f) = ExactCodeBuilder len $ \st -> first (g st) $ f st
 
 type CodeBuilderRes = [Either Int (Int, Word8)]
 
-type CodeBuilderState = (Int, [Either [(Size, Int, Int)] Int])
+type CodeBuilderState = (Int, LabelState)
+
+type LabelState = [Either [(Size, Int, Int)] Int]
 
 instance Monoid CodeBuilder where
-    mempty = CodeBuilder $ (,) mempty
+    mempty = ExactCodeBuilder 0 $ \(_, st) -> (mempty, st)
+    ExactCodeBuilder len f `mappend` ExactCodeBuilder len' g = ExactCodeBuilder (len + len') $ \st -> let
+            (a, st') = f st
+            (b, st'') = g (len + fst st, st')
+        in (a ++ b, st'')
     f `mappend` g = CodeBuilder $ \(buildCode f -> (a, buildCode g -> (b, st))) -> (a ++ b, st)
 
 codeByte :: Word8 -> CodeBuilder
-codeByte c = CodeBuilder $ \(n, labs) -> ([Right (n, c)], (n + 1, labs))
+codeByte c = ExactCodeBuilder 1 $ \(n, labs) -> ([Right (n, c)], labs)
 
 mkRef :: Size -> Int -> Int -> CodeBuilder
-mkRef s sc bs = CodeBuilder f
+mkRef s@(sizeLen -> sn) offset bs = ExactCodeBuilder sn f
   where
-    f (n, labs) | bs >= length labs = trace "warning: missing scope" (mempty, (n + sizeLen s, labs)) 
+    f (n, labs) | bs >= length labs = trace "warning: missing scope" (mempty, labs) 
     f (n, labs) = case labs !! bs of
-        Right i -> (Right <$> zip [n..] z, (n + sizeLen s, labs))
+        Right i -> (Right <$> zip [n..] z, labs)
           where
-            vx = i - n - sc
+            vx = i - n - offset
             z = getBytes $ case s of
                 S8  -> case vx of
                     Integral j -> toBytes (j :: Int8)
@@ -127,9 +133,9 @@ mkRef s sc bs = CodeBuilder f
                 S32  -> case vx of
                     Integral j -> toBytes (j :: Int32)
                     _ -> error $ show vx ++ " does not fit into an Int32"
-        Left cs -> (mempty, (n + sizeLen s, labs'))
+        Left cs -> (mempty, labs')
           where
-            labs' = take bs labs ++ Left ((s, n, - n - sc): cs): drop (bs + 1) labs
+            labs' = take bs labs ++ Left ((s, n, - n - offset): cs): drop (bs + 1) labs
 
 ------------------------------------------------------- code to code builder
 
@@ -154,20 +160,23 @@ codeBytes c = Bytes $ V.toList $ V.replicate s 0 V.// [p | Right p <- x]
 
 buildTheCode x = second fst $ buildCode (mkCodeBuilder x) (0, [])
 
+bytesToCodeBuilder :: Bytes -> CodeBuilder
+bytesToCodeBuilder x = ExactCodeBuilder (bytesCount x) $ \(n, labs) -> (Right <$> zip [n..] (getBytes x), labs)
+
 mkCodeBuilder :: Code -> CodeBuilder
 mkCodeBuilder = \case
     EmptyCode -> mempty
     AppendCode a b -> mkCodeBuilder a <> mkCodeBuilder b
 
-    Up a -> CodeBuilder $ \(n, x: xs) -> second (second (x:)) $ buildCode (mkCodeBuilder a) (n, xs)
+    Up a -> mapLabelState (\(x: xs) -> ((x:), xs)) $ mkCodeBuilder a
 
-    Scope x -> CodeBuilder begin <> mkCodeBuilder x <> CodeBuilder end
+    Scope x -> ExactCodeBuilder 0 begin <> mkCodeBuilder x <> ExactCodeBuilder 0 end
       where
-        begin (n, labs) = (mempty, (n, Left []: labs))
-        end (n, Right _: labs) = (mempty, (n, labs))
-        end (n, _: labs) = trace "warning: missing label" (mempty, (n, labs))
+        begin (n, labs) = (mempty, Left []: labs)
+        end (n, Right _: labs) = (mempty, labs)
+        end (n, _: labs) = trace "warning: missing label" (mempty, labs)
 
-    x -> CodeBuilder $ \st@(addr, _) -> first (Left addr:) $ buildCode (mkCodeBuilder' x) st
+    x -> censorCodeBuilder (\(addr, _) -> (Left addr:)) $ mkCodeBuilder' x
 
 mkCodeBuilder' :: Code -> CodeBuilder
 mkCodeBuilder' = \case
@@ -222,8 +231,8 @@ mkCodeBuilder' = \case
     Pop dest@(RegOp r) -> regprefix S32 dest (oneReg 0x0b r) mempty
     Pop dest -> regprefix S32 dest (codeByte 0x8f <> reg8 0x0 dest) mempty
 
-    Push (mkImmS S8 -> FJust (_, im))  -> codeByte 0x6a <> bytesToCode im
-    Push (mkImmS S32 -> FJust (_, im)) -> codeByte 0x68 <> bytesToCode im
+    Push (mkImmS S8 -> FJust (_, im))  -> codeByte 0x6a <> im
+    Push (mkImmS S32 -> FJust (_, im)) -> codeByte 0x68 <> im
     Push dest@(RegOp r) -> regprefix S32 dest (oneReg 0x0a r) mempty
     Push dest -> regprefix S32 dest (codeByte 0xff <> reg8 0x6 dest) mempty
 
@@ -244,10 +253,10 @@ mkCodeBuilder' = \case
     -- short jump
     Jmp -> codeByte 0xeb <> mkRef S8 1 0
 
-    Label -> CodeBuilder lab
+    Label -> ExactCodeBuilder 0 lab
       where
-        lab :: CodeBuilderState -> (CodeBuilderRes, CodeBuilderState)
-        lab (n, labs) = (Right <$> concatMap g corr, (n, labs'))
+        lab :: CodeBuilderState -> (CodeBuilderRes, LabelState)
+        lab (n, labs) = (Right <$> concatMap g corr, labs')
           where
             (corr, labs') = replL (Right n) labs
 
@@ -258,7 +267,7 @@ mkCodeBuilder' = \case
             replL x (Left z: zs) = (z, x: zs)
             replL x (z: zs) = second (z:) $ replL x zs
 
-    Data cs -> CodeBuilder $ \(n, labs) -> (Right <$> zip [n..] (getBytes cs), (n + bytesCount cs, labs))
+    Data x -> bytesToCodeBuilder x
     Align s -> CodeBuilder $ \(n, labs) -> let
                     n' = fromIntegral $ (fromIntegral n - 1 :: Int64) .|. f s + 1
                 in (Right <$> zip [n..] (replicate (n' - n) 0x90), (n', labs))
@@ -266,19 +275,26 @@ mkCodeBuilder' = \case
         f :: Size -> Int64
         f s = sizeLen s - 1
   where
+    convertImm :: Bool{-signed-} -> Size -> Operand s k -> First ((Bool, Size), CodeBuilder)
+    convertImm a b (ImmOp (Immediate c)) = First $ (,) (a, b) . bytesToCodeBuilder <$> integralToBytes a b c
+    convertImm True b (ImmOp (LabelRelValue s d)) | b == s = FJust $ (,) (True, b) $ mkRef s (sizeLen s) d
+    convertImm _ _ _ = FNothing
+
+    mkImmS, mkImm, mkImmNo64 :: Size -> Operand s k -> First ((Bool, Size), CodeBuilder)
+    mkImmS = convertImm True
+    mkImm  = convertImm False
+    mkImmNo64 s = mkImmS (no64 s)
+
     xchg_a :: IsSize s => Operand s a -> CodeBuilder
     xchg_a dest@(RegOp r) | size dest /= S8 = regprefix (size dest) dest (oneReg 0x12 r) mempty
     xchg_a dest = regprefix'' dest 0x43 (reg8 0x0 dest) mempty
 
-    bytesToCode :: Bytes -> CodeBuilder
-    bytesToCode = mkCodeBuilder' . Data
-
     toCode :: HasBytes a => a -> CodeBuilder
-    toCode = bytesToCode . toBytes
+    toCode = bytesToCodeBuilder . toBytes
 
-    sizePrefix_ :: [SReg] -> Size -> Operand s a -> Word8 -> CodeBuilder -> Bytes -> CodeBuilder
+    sizePrefix_ :: [SReg] -> Size -> Operand s a -> Word8 -> CodeBuilder -> CodeBuilder -> CodeBuilder
     sizePrefix_ rs s r x c im
-        | noHighRex rs = pre <> c <> displacement r <> bytesToCode im
+        | noHighRex rs = pre <> c <> displacement r <> im
         | otherwise = error "cannot use high register in rex instruction"
       where
         pre = case s of
@@ -297,7 +313,7 @@ mkCodeBuilder' = \case
         displacement :: Operand s a -> CodeBuilder
         displacement RegOp{} = mempty
         displacement (IPMemOp (Immediate d)) = toCode d
-        displacement (IPMemOp (LabelRelAddr d)) = mkRef S32 (4 + fromIntegral (bytesCount im)) d
+        displacement (IPMemOp (LabelRelValue s@S32 d)) = mkRef s (sizeLen s + fromIntegral (codeBuilderLength im)) d
         displacement (MemOp (Addr b d i)) = mkSIB b i <> dispVal b d
           where
             mkSIB _ (IndexReg s (NormalReg 0x4)) = error "sp cannot be used as index"
@@ -318,13 +334,13 @@ mkCodeBuilder' = \case
     reg8_ (NormalReg r) = r .&. 0x7
     reg8_ (HighReg r) = r .|. 0x4
 
-    regprefix :: IsSize s => Size -> Operand s a -> CodeBuilder -> Bytes -> CodeBuilder
+    regprefix :: IsSize s => Size -> Operand s a -> CodeBuilder -> CodeBuilder -> CodeBuilder
     regprefix s r c im = sizePrefix_ (regs r) s r (extbits r) c im
 
     regprefix2 :: (IsSize s1, IsSize s) => Operand s1 a1 -> Operand s a -> Word8 -> CodeBuilder -> CodeBuilder
     regprefix2 r r' p c = sizePrefix_ (regs r <> regs r') (size r) r (extbits r' `shiftL` 2 .|. extbits r) (extension r p <> c) mempty
 
-    regprefix'' :: IsSize s => Operand s a -> Word8 -> CodeBuilder -> Bytes -> CodeBuilder
+    regprefix'' :: IsSize s => Operand s a -> Word8 -> CodeBuilder -> CodeBuilder -> CodeBuilder
     regprefix'' r p c = regprefix (size r) r $ extension r p <> c
 
     extension :: HasSize a => a -> Word8 -> CodeBuilder
@@ -377,7 +393,7 @@ mkCodeBuilder' = \case
     op2g :: (IsSize t, IsSize s) => Word8 -> Operand s a1 -> Operand t a -> CodeBuilder
     op2g op dest src@(RegOp r) = regprefix2 dest src op $ reg8 (reg8_ r) dest
 
-    op1_ :: IsSize s => Word8 -> Word8 -> Operand s a -> Bytes -> CodeBuilder
+    op1_ :: IsSize s => Word8 -> Word8 -> Operand s a -> CodeBuilder -> CodeBuilder
     op1_ r1 r2 dest im = regprefix'' dest r1 (reg8 r2 dest) im
 
     op1 :: IsSize s => Word8 -> Word8 -> Operand s a -> CodeBuilder
@@ -387,7 +403,7 @@ mkCodeBuilder' = \case
     op1' r1 r2 dest = regprefix S32 dest (codeByte r1 <> reg8 r2 dest) mempty
 
     shiftOp :: IsSize s => Word8 -> Operand s RW -> Operand S8 k -> CodeBuilder
-    shiftOp c dest (ImmOp 1) = op1 0x68 c dest
+    shiftOp c dest (ImmOp (Immediate 1)) = op1 0x68 c dest
     shiftOp c dest (mkImm S8 -> FJust (_, i)) = op1_ 0x60 c dest i
     shiftOp c dest RegCl = op1 0x69 c dest
     shiftOp _ _ _ = error "invalid shift operands"

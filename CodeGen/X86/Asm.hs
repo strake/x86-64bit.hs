@@ -154,7 +154,7 @@ scaleFactor (Scale i) = case i of
 ------------------------------------------------------- operand
 
 data Operand :: Size -> Access -> * where
-    ImmOp     :: Int64 -> Operand s R
+    ImmOp     :: Immediate Int64 -> Operand s R
     RegOp     :: Reg s -> Operand s rw
     MemOp     :: IsSize s' => Addr s' -> Operand s rw
     IPMemOp   :: Immediate Int32 -> Operand s rw
@@ -163,7 +163,7 @@ addr = MemOp
 
 data Immediate a
     = Immediate a
-    | LabelRelAddr !LabelIndex
+    | LabelRelValue Size{-size hint-} !LabelIndex
 
 type LabelIndex = Int
 
@@ -192,7 +192,7 @@ pattern Disp a = Just a
 pattern NoIndex = Nothing
 pattern IndexReg a b = Just (a, b)
 
-ipBase = IPMemOp $ LabelRelAddr 0
+ipBase = IPMemOp $ LabelRelValue S32 0
 
 instance Eq (Reg s) where
     NormalReg a == NormalReg b = a == b
@@ -235,14 +235,17 @@ instance IsSize s => Show (Operand s a) where
     show = showOperand show
 
 showOperand mklab = \case
-    ImmOp w -> show w
+    ImmOp w -> showImm w
     RegOp r -> show r
     r@(MemOp a) -> show (size r) ++ " [" ++ show a ++ "]"
-    r@(IPMemOp (Immediate x)) -> show (size r) ++ " [" ++ "rel " ++ show x ++ "]"
-    r@(IPMemOp (LabelRelAddr x)) -> show (size r) ++ " [" ++ "rel " ++ mklab x ++ "]"
+    r@(IPMemOp x) -> show (size r) ++ " [" ++ "rel " ++ showImm x ++ "]"
   where
     showp x | x < 0 = " - " ++ show (-x)
     showp x = " + " ++ show x
+
+    showImm :: Show a => Immediate a -> String
+    showImm (Immediate x) = show x
+    showImm (LabelRelValue _ x) = mklab x
 
 instance IsSize s => HasSize (Operand s a) where
     size _ = size (ssize :: SSize s)
@@ -260,7 +263,7 @@ instance IsSize s => HasSize (IndexReg s) where
     size _ = size (ssize :: SSize s)
 
 imm :: Integral a => a -> Operand s R
-imm = ImmOp . fromIntegral
+imm = ImmOp . Immediate . fromIntegral
 
 instance Monoid (Addr s) where
     mempty = Addr (getFirst mempty) (getFirst mempty) (getFirst mempty)

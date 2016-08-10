@@ -132,7 +132,7 @@ instance IsSize s => Arbitrary (Operand s RW) where
 
 instance IsSize s => Arbitrary (Operand s R) where
     arbitrary = oneof
-        [ ImmOp <$> oneof (arbVal <$> [S8, S16, S32, S64])
+        [ imm <$> oneof (arbVal <$> [S8, S16, S32, S64])
         , genRegs
         , genMems
         , genIPBase
@@ -190,7 +190,7 @@ instance Arbitrary Code where
             ]
           where
             arb = oneof
-                [ ImmOp . fromIntegral <$> (arbitrary :: Gen Word8)
+                [ imm . fromIntegral <$> (arbitrary :: Gen Word8)
                 , return cl
                 ]
 
@@ -199,7 +199,7 @@ instance Arbitrary Code where
 
         noteqreg a b = x == nub x where x = map phisicalReg $ regs a ++ regs b
 
-        okk (size -> s) i@ImmOp{} = isJust (getFirst $ mkImmS (no64 s) i)
+        okk (size -> s) (ImmOp (Immediate i)) = isJust (integralToBytes True (no64 s) i)
         okk _ _ = True
 
         -- TODO: remove
@@ -207,7 +207,7 @@ instance Arbitrary Code where
         ok' a b | isMemOp a && isMemOp b = False
         ok' a b = noteqreg a b
 
-        oki x@RegOp{} i@ImmOp{} = isJust (getFirst $ mkImmS (size x) i)
+        oki x@RegOp{} (ImmOp (Immediate i)) = isJust (integralToBytes True (size x) i)
         oki a b = okk a b
 
 ---------------------------------------------------
@@ -350,11 +350,11 @@ instance Arbitrary InstrTest where
 
       where
         mkVal :: IsSize s => Operand S64 RW -> Operand s k -> Gen (Int64, Code -> Code)
-        mkVal _ o@(ImmOp w) = return (w, id)
+        mkVal _ o@(ImmOp (Immediate w)) = return (w, id)
         mkVal _ o@(RegOp x) = do
             v <- arbVal $ size o
-            return (v, (Mov (RegOp x) (ImmOp v) <>))
-        mkVal helper x@(IPMemOp (LabelRelAddr _)) = do
+            return (v, (Mov (RegOp x) (imm v) <>))
+        mkVal helper x@(IPMemOp LabelRelValue{}) = do
             v <- arbVal $ size x
             return (v, \c -> Scope $ Up Jmp {- <> align (size x) -} <:> Data (toBytes v) <.> c)
         mkVal helper o@(MemOp (Addr (Just x) d i)) = do
@@ -363,7 +363,7 @@ instance Arbitrary InstrTest where
                 NoIndex -> return (0, mempty)
                 IndexReg sc i -> do
                     x <- arbVal $ size i
-                    return (scaleFactor sc * x, Mov (RegOp i) (ImmOp x))
+                    return (scaleFactor sc * x, Mov (RegOp i) (imm x))
             let
                 d' = (vi :: Int64) + case d of
                     NoDisp -> 0
