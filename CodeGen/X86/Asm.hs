@@ -538,7 +538,11 @@ showCodeFrag = \case
     Std   -> showOp0 "std"
 
     Align s -> codeLine $ ".align " ++ show s
-    Data (Bytes x) -> showOp "db" $ intercalate ", " (show <$> x) ++ "  ; " ++ show (toEnum . fromIntegral <$> x :: String)
+    Data (Bytes x)
+        | 2 * length (filter isPrint x) > length x -> showOp "db" $ show (toEnum . fromIntegral <$> x :: String)
+        | otherwise -> showOp "db" $ intercalate ", " (show <$> x)
+      where
+        isPrint c = c >= 32 && c <= 126
 
 showOp0 s = codeLine s
 showOp s a = showOp0 $ s ++ " " ++ a
