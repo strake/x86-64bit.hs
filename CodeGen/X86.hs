@@ -34,7 +34,22 @@ module CodeGen.X86
     , ah, ch, dh, bh
     -- * Conditions
     , Condition
-    , pattern O, pattern NO, pattern C, pattern NC, pattern Z, pattern NZ, pattern BE, pattern NBE, pattern S, pattern NS, pattern P, pattern NP, pattern L, pattern NL, pattern LE, pattern NLE
+    , pattern O
+    , pattern NO
+    , pattern B,  pattern C
+    , pattern NB, pattern NC
+    , pattern E,  pattern Z
+    , pattern NE, pattern NZ
+    , pattern NA, pattern BE
+    , pattern A,  pattern NBE
+    , pattern S
+    , pattern NS
+    , pattern P
+    , pattern NP
+    , pattern L
+    , pattern NL
+    , pattern NG, pattern LE
+    , pattern G,  pattern NLE
     -- * Assembly codes
     , Code (..)
     -- * Compound assembly codes
