@@ -17,9 +17,7 @@
 -   add top level type signatures
 -   more Haddock comments
 
-# Label handling
+# Other
 
--   support size hints
--   auto size computation for backward references
 -   merge Jmp and Jmpq constructors?
 

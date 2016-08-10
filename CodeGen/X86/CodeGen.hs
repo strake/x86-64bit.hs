@@ -121,7 +121,7 @@ codeByte c = ExactCodeBuilder 1 $ \(n, labs) -> ([Right (n, c)], labs)
 mkRef :: Size -> Int -> Int -> CodeBuilder
 mkRef s@(sizeLen -> sn) offset bs = ExactCodeBuilder sn f
   where
-    f (n, labs) | bs >= length labs = trace "warning: missing scope" (mempty, labs) 
+    f (n, labs) | bs >= length labs = error "missing scope"
     f (n, labs) = case labs !! bs of
         Right i -> (Right <$> zip [n..] z, labs)
           where
@@ -136,6 +136,23 @@ mkRef s@(sizeLen -> sn) offset bs = ExactCodeBuilder sn f
         Left cs -> (mempty, labs')
           where
             labs' = take bs labs ++ Left ((s, n, - n - offset): cs): drop (bs + 1) labs
+
+mkAutoRef :: [(Size, Bytes)] -> Int -> Int -> CodeBuilder
+mkAutoRef ss offset bs = CodeBuilder f
+  where
+    f (n, labs) | bs >= length labs = error "missing scope"
+    f (n, labs) = case labs !! bs of
+        Left cs -> error "auto length computation for forward references is not supported"
+        Right i -> (Right <$> zip [n..] z, (n + length z, labs))
+          where
+            vx = i - n - offset
+            z = g ss
+
+            g [] = error $ show vx ++ " does not fit into auto size"
+            g ((s, c): ss) = case (s, vx - bytesCount c - sizeLen s) of
+                (S8,  Integral j) -> getBytes $ c <> toBytes (j :: Int8)
+                (S32, Integral j) -> getBytes $ c <> toBytes (j :: Int32)
+                _ -> g ss
 
 ------------------------------------------------------- code to code builder
 
@@ -248,8 +265,9 @@ mkCodeBuilder' = \case
     Cld   -> codeByte 0xfc
     Std   -> codeByte 0xfd
 
-    J S8  (Condition c) -> codeByte (0x70 .|. c) <> mkRef S8 1 0
-    J S32 (Condition c) -> codeByte 0x0f <> codeByte (0x80 .|. c) <> mkRef S32 4 0
+    J (Just S8)  (Condition c) -> codeByte (0x70 .|. c) <> mkRef S8 1 0
+    J (Just S32) (Condition c) -> codeByte 0x0f <> codeByte (0x80 .|. c) <> mkRef S32 4 0
+    J Nothing    (Condition c) -> mkAutoRef [(S8, Bytes [0x70 .|. c]), (S32, Bytes [0x0f, 0x80 .|. c])] 0 0
 
     -- short jump
     Jmp -> codeByte 0xeb <> mkRef S8 1 0
