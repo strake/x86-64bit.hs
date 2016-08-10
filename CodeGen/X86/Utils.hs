@@ -25,8 +25,8 @@ a <:> b = Scope $ a <.> b
 
 infixr 5 <:>, <.>
 
--- | short conditional forward jump (no auto size available for forward jumps)
-j = j8
+-- | near conditional forward jump (no auto size available for forward jumps)
+j = j32
 
 -- | short conditional forward jump
 j8 c x = J (Just S8) c <> Up x <:> mempty
