@@ -538,7 +538,7 @@ showCodeFrag = \case
     Std   -> showOp0 "std"
 
     Align s -> codeLine $ ".align " ++ show s
-    Data (Bytes x) -> showOp "db" $ intercalate ", " (showByte <$> x) ++ "  ; " ++ show (toEnum . fromIntegral <$> x :: String)
+    Data (Bytes x) -> showOp "db" $ intercalate ", " (show <$> x) ++ "  ; " ++ show (toEnum . fromIntegral <$> x :: String)
 
 showOp0 s = codeLine s
 showOp s a = showOp0 $ s ++ " " ++ a
