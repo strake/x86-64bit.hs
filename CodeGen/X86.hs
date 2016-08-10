@@ -1,4 +1,3 @@
-{-# language CPP #-}
 {-# language PatternSynonyms #-}
 module CodeGen.X86
     (
@@ -58,9 +57,6 @@ module CodeGen.X86
     , runTests
     , CString (..)
     , traceReg
-#ifdef linux_HOST_OS
-    , memalign
-#endif
     , printf
     ) where
 
