@@ -20,6 +20,7 @@ import CodeGen.X86.CodeGen
 
 -------------------------------------------------------
 
+-- this should be queried from the OS dynamically...
 #define PAGE_SIZE 4096
 
 #if defined (mingw32_HOST_OS) || defined (mingw64_HOST_OS) 
@@ -68,11 +69,18 @@ foreign import ccall "static malloc.h  _aligned_malloc" c_aligned_malloc :: CSiz
 foreign import ccall "static malloc.h  _aligned_free"   c_aligned_free   :: Ptr a -> IO ()
 foreign import ccall "static malloc.h &_aligned_free"   ptr_aligned_free :: FunPtr (Ptr a -> IO ())
 
-#elif defined linux_HOST_OS
+#elif defined (linux_HOST_OS)
 
-foreign import ccall "static stdlib.h memalign"   memalign :: CUInt -> CUInt -> IO (Ptr a)
+-- on Linux too, we should use posix_memalign...
+foreign import ccall "static stdlib.h memalign"   memalign :: CSize -> CSize -> IO (Ptr a)
 foreign import ccall "static stdlib.h &free"      stdfree  :: FunPtr (Ptr a -> IO ())
-foreign import ccall "static sys/mman.h mprotect" mprotect :: Ptr a -> CUInt -> Int -> IO Int
+foreign import ccall "static sys/mman.h mprotect" mprotect :: Ptr a -> CSize -> CInt -> IO CInt
+
+#elif defined (darwin_HOST_OS) || defined (freebsd_HOST_OS) || defined (openbsd_HOST_OS) || defined (netbsd_HOST_OS) 
+
+foreign import ccall "static stdlib.h posix_memalign"   posix_memalign :: Ptr (Ptr a) -> CSize -> CSize -> IO CInt
+foreign import ccall "static stdlib.h &free"            stdfree        :: FunPtr (Ptr a -> IO ())
+foreign import ccall "static sys/mman.h mprotect"       mprotect       :: Ptr a -> CSize -> CInt -> IO CInt
 
 #endif
 
@@ -99,6 +107,31 @@ compile :: Callable a => Code -> a
 compile x = unsafeCallForeignPtr $ unsafePerformIO $ do
     let (bytes, fromIntegral -> size) = buildTheCode x
     arr <- memalign PAGE_SIZE size
+    _ <- mprotect arr size 0x7 -- READ, WRITE, EXEC
+    forM_ [p | Right p <- bytes] $ uncurry $ pokeByteOff arr
+    newForeignPtr stdfree arr
+
+#elif defined (darwin_HOST_OS) || defined (freebsd_HOST_OS) || defined (openbsd_HOST_OS) || defined (netbsd_HOST_OS) 
+
+-- | This calls @posix_memalign()@
+posixMemAlign 
+  :: CSize               -- ^ alignment
+  -> CSize               -- ^ size
+  -> IO (Ptr a)
+posixMemAlign alignment size0 =
+  alloca $ \pp -> do
+    let a    = max alignment 8
+        size = mod (size0 + a - 1) a      -- size *must* be a multiple of both alignment and sizeof(void*)
+    res <- posix_memalign pp alignment size
+    case res of
+      0 -> peek pp
+      _ -> error "posix_memalign failed"
+      
+{-# NOINLINE compile #-}
+compile :: Callable a => Code -> a
+compile x = unsafeCallForeignPtr $ unsafePerformIO $ do
+    let (bytes, fromIntegral -> size) = buildTheCode x
+    arr <- posixMemAlign PAGE_SIZE size
     _ <- mprotect arr size 0x7 -- READ, WRITE, EXEC
     forM_ [p | Right p <- bytes] $ uncurry $ pokeByteOff arr
     newForeignPtr stdfree arr
