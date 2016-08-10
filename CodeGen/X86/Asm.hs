@@ -436,56 +436,33 @@ instance Show Condition where
         0xe -> "le"
         0xf -> "nle"
 
--------------------------------------------------------------- asm code
+-------------------------------------------------------------- asm code lines
 
-data Code where
-    Ret, Nop, PushF, PopF, Cmc, Clc, Stc, Cli, Sti, Cld, Std   :: Code
+data CodeLine where
+    Ret_, Nop_, PushF_, PopF_, Cmc_, Clc_, Stc_, Cli_, Sti_, Cld_, Std_   :: CodeLine
 
-    Inc, Dec, Not, Neg                                :: IsSize s => Operand s RW -> Code
-    Add, Or, Adc, Sbb, And, Sub, Xor, Cmp, Test, Mov  :: IsSize s => Operand s RW -> Operand s  r -> Code
-    Rol, Ror, Rcl, Rcr, Shl, Shr, Sar                 :: IsSize s => Operand s RW -> Operand S8 r -> Code
+    Inc_, Dec_, Not_, Neg_                                :: IsSize s => Operand s RW -> CodeLine
+    Add_, Or_, Adc_, Sbb_, And_, Sub_, Xor_, Cmp_, Test_, Mov_  :: IsSize s => Operand s RW -> Operand s  r -> CodeLine
+    Rol_, Ror_, Rcl_, Rcr_, Shl_, Shr_, Sar_                 :: IsSize s => Operand s RW -> Operand S8 r -> CodeLine
 
-    Xchg :: IsSize s => Operand s RW -> Operand s RW -> Code
-    Lea  :: (IsSize s, IsSize s') => Operand s RW -> Operand s' RW -> Code
+    Xchg_ :: IsSize s => Operand s RW -> Operand s RW -> CodeLine
+    Lea_  :: (IsSize s, IsSize s') => Operand s RW -> Operand s' RW -> CodeLine
 
-    Pop  :: Operand S64 RW -> Code
-    Push :: Operand S64 r  -> Code
+    Pop_  :: Operand S64 RW -> CodeLine
+    Push_ :: Operand S64 r  -> CodeLine
 
-    Call :: Operand S64 RW -> Code
-    Jmpq :: Operand S64 RW -> Code
+    Call_ :: Operand S64 RW -> CodeLine
+    Jmpq_ :: Operand S64 RW -> CodeLine
 
-    J    :: Maybe Size -> Condition -> Code
-    Jmp  :: Code
+    J_    :: Maybe Size -> Condition -> CodeLine
+    Jmp_  :: CodeLine
 
-    Label :: Code
-    Scope :: Code -> Code
-    Up    :: Code -> Code
+    Label_ :: CodeLine
 
-    Data  :: Bytes -> Code
-    Align :: Size  -> Code
+    Data_  :: Bytes -> CodeLine
+    Align_ :: Size  -> CodeLine
 
-    EmptyCode  :: Code
-    AppendCode :: Code -> Code -> Code
-
-instance Monoid Code where
-    mempty  = EmptyCode
-    mappend = AppendCode
-
--------------
-
-showCode = \case
-    EmptyCode  -> return ()
-    AppendCode a b -> showCode a >> showCode b
-
-    Scope c -> get >>= \i -> put (i+1) >> local (i:) (showCode c)
-
-    Up c -> local tail $ showCode c
-
-    J s cc -> getLabel 0 >>= \l -> showOp ("j" ++ show cc) $ (case s of Just S8 -> "short "; Just S32 -> "near "; _ -> "") ++ l
-    Jmp   -> getLabel 0 >>= \l -> showOp "jmp" l
-    Label -> getLabel 0 >>= codeLine
-
-    x -> showCodeFrag x
+------------------------- show code lines
 
 getLabel i = ($ i) <$> getLabels
 
@@ -497,55 +474,59 @@ getLabels = f <$> ask
 
 codeLine x = tell [x]
 
-showCodeFrag = \case
-    Add  op1 op2 -> showOp2 "add"  op1 op2
-    Or   op1 op2 -> showOp2 "or"   op1 op2
-    Adc  op1 op2 -> showOp2 "adc"  op1 op2
-    Sbb  op1 op2 -> showOp2 "sbb"  op1 op2
-    And  op1 op2 -> showOp2 "and"  op1 op2
-    Sub  op1 op2 -> showOp2 "sub"  op1 op2
-    Xor  op1 op2 -> showOp2 "xor"  op1 op2
-    Cmp  op1 op2 -> showOp2 "cmp"  op1 op2
-    Test op1 op2 -> showOp2 "test" op1 op2
-    Rol  op1 op2 -> showOp2 "rol"  op1 op2
-    Ror  op1 op2 -> showOp2 "rol"  op1 op2
-    Rcl  op1 op2 -> showOp2 "rol"  op1 op2
-    Rcr  op1 op2 -> showOp2 "rol"  op1 op2
-    Shl  op1 op2 -> showOp2 "rol"  op1 op2
-    Shr  op1 op2 -> showOp2 "rol"  op1 op2
-    Sar  op1 op2 -> showOp2 "rol"  op1 op2
-    Mov  op1 op2 -> showOp2 "mov"  op1 op2
-    Lea  op1 op2 -> showOp2 "lea"  op1 op2
-    Xchg op1 op2 -> showOp2 "xchg" op1 op2
-    Inc  op -> showOp1 "inc"  op
-    Dec  op -> showOp1 "dec"  op
-    Not  op -> showOp1 "not"  op
-    Neg  op -> showOp1 "neg"  op
-    Pop  op -> showOp1 "pop"  op
-    Push op -> showOp1 "push" op
-    Call op -> showOp1 "call" op
-    Jmpq op -> showOp1 "jmp"  op
-    Ret   -> showOp0 "ret"
-    Nop   -> showOp0 "nop"
-    PushF -> showOp0 "pushf"
-    PopF  -> showOp0 "popf"
-    Cmc   -> showOp0 "cmc"
-    Clc   -> showOp0 "clc"
-    Stc   -> showOp0 "stc"
-    Cli   -> showOp0 "cli"
-    Sti   -> showOp0 "sti"
-    Cld   -> showOp0 "cld"
-    Std   -> showOp0 "std"
+showOp0 s = codeLine s
+showOp s a = showOp0 $ s ++ " " ++ a
+showOp1 s a = getLabels >>= \f -> showOp s $ showOperand f a
+showOp2 s a b = getLabels >>= \f -> showOp s $ showOperand f a ++ ", " ++ showOperand f b
 
-    Align s -> codeLine $ ".align " ++ show s
-    Data (Bytes x)
+showCodeLine = \case
+    Add_  op1 op2 -> showOp2 "add"  op1 op2
+    Or_   op1 op2 -> showOp2 "or"   op1 op2
+    Adc_  op1 op2 -> showOp2 "adc"  op1 op2
+    Sbb_  op1 op2 -> showOp2 "sbb"  op1 op2
+    And_  op1 op2 -> showOp2 "and"  op1 op2
+    Sub_  op1 op2 -> showOp2 "sub"  op1 op2
+    Xor_  op1 op2 -> showOp2 "xor"  op1 op2
+    Cmp_  op1 op2 -> showOp2 "cmp"  op1 op2
+    Test_ op1 op2 -> showOp2 "test" op1 op2
+    Rol_  op1 op2 -> showOp2 "rol"  op1 op2
+    Ror_  op1 op2 -> showOp2 "rol"  op1 op2
+    Rcl_  op1 op2 -> showOp2 "rol"  op1 op2
+    Rcr_  op1 op2 -> showOp2 "rol"  op1 op2
+    Shl_  op1 op2 -> showOp2 "rol"  op1 op2
+    Shr_  op1 op2 -> showOp2 "rol"  op1 op2
+    Sar_  op1 op2 -> showOp2 "rol"  op1 op2
+    Mov_  op1 op2 -> showOp2 "mov"  op1 op2
+    Lea_  op1 op2 -> showOp2 "lea"  op1 op2
+    Xchg_ op1 op2 -> showOp2 "xchg" op1 op2
+    Inc_  op -> showOp1 "inc"  op
+    Dec_  op -> showOp1 "dec"  op
+    Not_  op -> showOp1 "not"  op
+    Neg_  op -> showOp1 "neg"  op
+    Pop_  op -> showOp1 "pop"  op
+    Push_ op -> showOp1 "push" op
+    Call_ op -> showOp1 "call" op
+    Jmpq_ op -> showOp1 "jmp"  op
+    Ret_   -> showOp0 "ret"
+    Nop_   -> showOp0 "nop"
+    PushF_ -> showOp0 "pushf"
+    PopF_  -> showOp0 "popf"
+    Cmc_   -> showOp0 "cmc"
+    Clc_   -> showOp0 "clc"
+    Stc_   -> showOp0 "stc"
+    Cli_   -> showOp0 "cli"
+    Sti_   -> showOp0 "sti"
+    Cld_   -> showOp0 "cld"
+    Std_   -> showOp0 "std"
+
+    Align_ s -> codeLine $ ".align " ++ show s
+    Data_ (Bytes x)
         | 2 * length (filter isPrint x) > length x -> showOp "db" $ show (toEnum . fromIntegral <$> x :: String)
         | otherwise -> showOp "db" $ intercalate ", " (show <$> x)
       where
         isPrint c = c >= 32 && c <= 126
 
-showOp0 s = codeLine s
-showOp s a = showOp0 $ s ++ " " ++ a
-showOp1 s a = getLabels >>= \f -> showOp s $ showOperand f a
-showOp2 s a b = getLabels >>= \f -> showOp s $ showOperand f a ++ ", " ++ showOperand f b
+    J_ s cc -> getLabel 0 >>= \l -> showOp ("j" ++ show cc) $ (case s of Just S8 -> "short "; Just S32 -> "near "; _ -> "") ++ l
+    Jmp_    -> getLabel 0 >>= \l -> showOp "jmp" l
+    Label_  -> getLabel 0 >>= codeLine
 

@@ -51,7 +51,50 @@ module CodeGen.X86
     , pattern NG, pattern LE
     , pattern G,  pattern NLE
     -- * Assembly codes
-    , Code (..)
+    , Code
+    , pattern Ret
+    , pattern Nop
+    , pattern PushF
+    , pattern PopF
+    , pattern Cmc
+    , pattern Clc
+    , pattern Stc
+    , pattern Cli
+    , pattern Sti
+    , pattern Cld
+    , pattern Std
+    , pattern Inc
+    , pattern Dec
+    , pattern Not
+    , pattern Neg
+    , pattern Add
+    , pattern Or
+    , pattern Adc
+    , pattern Sbb
+    , pattern And
+    , pattern Sub
+    , pattern Xor
+    , pattern Cmp
+    , pattern Test
+    , pattern Mov
+    , pattern Rol
+    , pattern Ror
+    , pattern Rcl
+    , pattern Rcr
+    , pattern Shl
+    , pattern Shr
+    , pattern Sar
+    , pattern Xchg
+    , pattern Lea
+    , pattern J
+    , pattern Pop
+    , pattern Push
+    , pattern Call
+    , pattern Jmpq
+    , pattern Jmp
+    , pattern Data
+    , pattern Align
+    , pattern Label
     -- * Compound assembly codes
     , (<>)
     , (<.>), (<:>)

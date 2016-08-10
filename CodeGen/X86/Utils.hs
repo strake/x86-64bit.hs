@@ -27,7 +27,7 @@ a <:> b = Scope $ a <.> b
 infixr 5 <:>, <.>
 
 -- | auto size conditional forward jump
-j c x = if f $ mkCodeBuilder (Up x) then j8 c x else j32 c x        -- TODO: make this faster
+j c x = if f $ mkCodeBuilder (Up x) then j8 c x else j32 c x
   where
     f (ExactCodeBuilder len _) = len <= 127
     f _ = False

@@ -8,7 +8,9 @@ module CodeGen.X86.CallConv where
 
 import Foreign
 import Data.Monoid
+
 import CodeGen.X86.Asm
+import CodeGen.X86.CodeGen
 
 ------------------------------------------------------------------------------ 
 

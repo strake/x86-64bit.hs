@@ -183,7 +183,7 @@ bytesToCodeBuilder x = ExactCodeBuilder (bytesCount x) $ \(n, labs) -> (Right <$
 mkCodeBuilder :: Code -> CodeBuilder
 mkCodeBuilder = \case
     EmptyCode -> mempty
-    AppendCode a b -> mkCodeBuilder a <> mkCodeBuilder b
+    AppendCode cb _ _ -> cb
 
     Up a -> mapLabelState (\(x: xs) -> ((x:), xs)) $ mkCodeBuilder a
 
@@ -193,86 +193,86 @@ mkCodeBuilder = \case
         end (n, Right _: labs) = (mempty, labs)
         end (n, _: labs) = trace "warning: missing label" (mempty, labs)
 
-    x -> censorCodeBuilder (\(addr, _) -> (Left addr:)) $ mkCodeBuilder' x
+    CodeLine_ cb _ -> censorCodeBuilder (\(addr, _) -> (Left addr:)) cb
 
-mkCodeBuilder' :: Code -> CodeBuilder
+mkCodeBuilder' :: CodeLine -> CodeBuilder
 mkCodeBuilder' = \case
-    Add  a b -> op2 0x0 a b
-    Or   a b -> op2 0x1 a b
-    Adc  a b -> op2 0x2 a b
-    Sbb  a b -> op2 0x3 a b
-    And  a b -> op2 0x4 a b
-    Sub  a b -> op2 0x5 a b
-    Xor  a b -> op2 0x6 a b
-    Cmp  a b -> op2 0x7 a b
+    Add_  a b -> op2 0x0 a b
+    Or_   a b -> op2 0x1 a b
+    Adc_  a b -> op2 0x2 a b
+    Sbb_  a b -> op2 0x3 a b
+    And_  a b -> op2 0x4 a b
+    Sub_  a b -> op2 0x5 a b
+    Xor_  a b -> op2 0x6 a b
+    Cmp_  a b -> op2 0x7 a b
 
-    Rol a b -> shiftOp 0x0 a b
-    Ror a b -> shiftOp 0x1 a b
-    Rcl a b -> shiftOp 0x2 a b
-    Rcr a b -> shiftOp 0x3 a b
-    Shl a b -> shiftOp 0x4 a b -- sal
-    Shr a b -> shiftOp 0x5 a b
-    Sar a b -> shiftOp 0x7 a b
+    Rol_ a b -> shiftOp 0x0 a b
+    Ror_ a b -> shiftOp 0x1 a b
+    Rcl_ a b -> shiftOp 0x2 a b
+    Rcr_ a b -> shiftOp 0x3 a b
+    Shl_ a b -> shiftOp 0x4 a b -- sal
+    Shr_ a b -> shiftOp 0x5 a b
+    Sar_ a b -> shiftOp 0x7 a b
 
-    Xchg x@RegA r -> xchg_a r
-    Xchg r x@RegA -> xchg_a r
-    Xchg dest src -> op2' 0x43 dest' src
+    Xchg_ x@RegA r -> xchg_a r
+    Xchg_ r x@RegA -> xchg_a r
+    Xchg_ dest src -> op2' 0x43 dest' src
       where
         (dest', src') = if isMemOp src then (src, dest) else (dest, src)
 
-    Test dest (mkImmNo64 (size dest) -> FJust (_, im)) -> case dest of
+    Test_ dest (mkImmNo64 (size dest) -> FJust (_, im)) -> case dest of
         RegA -> regprefix'' dest 0x54 mempty im
         _ -> regprefix'' dest 0x7b (reg8 0x0 dest) im
-    Test dest (noImm "" -> src) -> op2' 0x42 dest' src'
+    Test_ dest (noImm "" -> src) -> op2' 0x42 dest' src'
       where
         (dest', src') = if isMemOp src then (src, dest) else (dest, src)
 
-    Mov dest@(RegOp r) ((if size dest == S64 then mkImm S32 <> mkImmS S32 <> mkImmS S64 else mkImmS (size dest)) -> FJust ((se, si), im))
+    Mov_ dest@(RegOp r) ((if size dest == S64 then mkImm S32 <> mkImmS S32 <> mkImmS S64 else mkImmS (size dest)) -> FJust ((se, si), im))
         | (se, si, size dest) /= (True, S32, S64) -> regprefix si dest (oneReg (0x16 .|. indicator (size dest /= S8)) r) im
         | otherwise -> regprefix'' dest 0x63 (reg8 0x0 dest) im
-    Mov dest@(size -> s) (mkImmNo64 s -> FJust (_, im)) -> regprefix'' dest 0x63 (reg8 0x0 dest) im
-    Mov dest src -> op2' 0x44 dest $ noImm (show (dest, src)) src
+    Mov_ dest@(size -> s) (mkImmNo64 s -> FJust (_, im)) -> regprefix'' dest 0x63 (reg8 0x0 dest) im
+    Mov_ dest src -> op2' 0x44 dest $ noImm (show (dest, src)) src
 
-    Lea dest@(RegOp r) src | size dest /= S8 -> regprefix2 (resizeOperand' dest src) dest 0x46 $ reg8 (reg8_ r) src
+    Lea_ dest@(RegOp r) src | size dest /= S8 -> regprefix2 (resizeOperand' dest src) dest 0x46 $ reg8 (reg8_ r) src
       where
         resizeOperand' :: IsSize s1 => Operand s1 x -> Operand s2 RW -> Operand s1 RW
         resizeOperand' _ = resizeOperand
 
-    Not  a -> op1 0x7b 0x2 a
-    Neg  a -> op1 0x7b 0x3 a
-    Inc  a -> op1 0x7f 0x0 a
-    Dec  a -> op1 0x7f 0x1 a
-    Call a -> op1' 0xff 0x2 a
-    Jmpq a -> op1' 0xff 0x4 a
+    Not_  a -> op1 0x7b 0x2 a
+    Neg_  a -> op1 0x7b 0x3 a
+    Inc_  a -> op1 0x7f 0x0 a
+    Dec_  a -> op1 0x7f 0x1 a
+    Call_ a -> op1' 0xff 0x2 a
+    Jmpq_ a -> op1' 0xff 0x4 a
 
-    Pop dest@(RegOp r) -> regprefix S32 dest (oneReg 0x0b r) mempty
-    Pop dest -> regprefix S32 dest (codeByte 0x8f <> reg8 0x0 dest) mempty
+    Pop_ dest@(RegOp r) -> regprefix S32 dest (oneReg 0x0b r) mempty
+    Pop_ dest -> regprefix S32 dest (codeByte 0x8f <> reg8 0x0 dest) mempty
 
-    Push (mkImmS S8 -> FJust (_, im))  -> codeByte 0x6a <> im
-    Push (mkImmS S32 -> FJust (_, im)) -> codeByte 0x68 <> im
-    Push dest@(RegOp r) -> regprefix S32 dest (oneReg 0x0a r) mempty
-    Push dest -> regprefix S32 dest (codeByte 0xff <> reg8 0x6 dest) mempty
+    Push_ (mkImmS S8 -> FJust (_, im))  -> codeByte 0x6a <> im
+    Push_ (mkImmS S32 -> FJust (_, im)) -> codeByte 0x68 <> im
+    Push_ dest@(RegOp r) -> regprefix S32 dest (oneReg 0x0a r) mempty
+    Push_ dest -> regprefix S32 dest (codeByte 0xff <> reg8 0x6 dest) mempty
 
-    Ret   -> codeByte 0xc3
-    Nop   -> codeByte 0x90
-    PushF -> codeByte 0x9c
-    PopF  -> codeByte 0x9d
-    Cmc   -> codeByte 0xf5
-    Clc   -> codeByte 0xf8
-    Stc   -> codeByte 0xf9
-    Cli   -> codeByte 0xfa
-    Sti   -> codeByte 0xfb
-    Cld   -> codeByte 0xfc
-    Std   -> codeByte 0xfd
+    Ret_   -> codeByte 0xc3
+    Nop_   -> codeByte 0x90
+    PushF_ -> codeByte 0x9c
+    PopF_  -> codeByte 0x9d
+    Cmc_   -> codeByte 0xf5
+    Clc_   -> codeByte 0xf8
+    Stc_   -> codeByte 0xf9
+    Cli_   -> codeByte 0xfa
+    Sti_   -> codeByte 0xfb
+    Cld_   -> codeByte 0xfc
+    Std_   -> codeByte 0xfd
 
-    J (Just S8)  (Condition c) -> codeByte (0x70 .|. c) <> mkRef S8 1 0
-    J (Just S32) (Condition c) -> codeByte 0x0f <> codeByte (0x80 .|. c) <> mkRef S32 4 0
-    J Nothing    (Condition c) -> mkAutoRef [(S8, Bytes [0x70 .|. c]), (S32, Bytes [0x0f, 0x80 .|. c])] 0 0
+    J_ (Just S8)  (Condition c) -> codeByte (0x70 .|. c) <> mkRef S8 1 0
+    J_ (Just S32) (Condition c) -> codeByte 0x0f <> codeByte (0x80 .|. c) <> mkRef S32 4 0
+    J_ Nothing    (Condition c) -> mkAutoRef [(S8, Bytes [0x70 .|. c]), (S32, Bytes [0x0f, 0x80 .|. c])] 0 0
 
     -- short jump
-    Jmp -> codeByte 0xeb <> mkRef S8 1 0
+    Jmp_ -> codeByte 0xeb <> mkRef S8 1 0
 
-    Label -> ExactCodeBuilder 0 lab
+    Label_ -> ExactCodeBuilder 0 lab
       where
         lab :: CodeBuilderState -> (CodeBuilderRes, LabelState)
         lab (n, labs) = (Right <$> concatMap g corr, labs')
@@ -286,8 +286,8 @@ mkCodeBuilder' = \case
             replL x (Left z: zs) = (z, x: zs)
             replL x (z: zs) = second (z:) $ replL x zs
 
-    Data x -> bytesToCodeBuilder x
-    Align s -> CodeBuilder $ \(n, labs) -> let
+    Data_ x -> bytesToCodeBuilder x
+    Align_ s -> CodeBuilder $ \(n, labs) -> let
                     n' = fromIntegral $ (fromIntegral n - 1 :: Int64) .|. f s + 1
                 in (Right <$> zip [n..] (replicate (n' - n) 0x90), (n', labs))
       where
@@ -429,4 +429,77 @@ mkCodeBuilder' = \case
 
     oneReg :: Word8 -> Reg t -> CodeBuilder
     oneReg x r = codeByte $ x `shiftL` 3 .|. reg8_ r
+
+
+-------------------------------------------------------------- asm codes
+
+data Code where
+    Scope       :: Code -> Code
+    Up          :: Code -> Code
+    EmptyCode   :: Code
+    AppendCode  :: CodeBuilder -> Code -> Code -> Code
+    CodeLine_   :: CodeBuilder -> CodeLine -> Code
+
+instance Monoid Code where
+    mempty  = EmptyCode
+    mappend a b = AppendCode (mkCodeBuilder a <> mkCodeBuilder b) a b
+
+pattern CodeLine x <- CodeLine_ _ x
+  where CodeLine x =  CodeLine_ (mkCodeBuilder' x) x
+
+pattern Ret = CodeLine Ret_
+pattern Nop = CodeLine Nop_
+pattern PushF = CodeLine PushF_
+pattern PopF = CodeLine PopF_
+pattern Cmc = CodeLine Cmc_
+pattern Clc = CodeLine Clc_
+pattern Stc = CodeLine Stc_
+pattern Cli = CodeLine Cli_
+pattern Sti = CodeLine Sti_
+pattern Cld = CodeLine Cld_
+pattern Std = CodeLine Std_
+pattern Inc a = CodeLine (Inc_ a)
+pattern Dec a = CodeLine (Dec_ a)
+pattern Not a = CodeLine (Not_ a)
+pattern Neg a = CodeLine (Neg_ a)
+pattern Add a b = CodeLine (Add_ a b)
+pattern Or  a b = CodeLine (Or_  a b)
+pattern Adc a b = CodeLine (Adc_ a b)
+pattern Sbb a b = CodeLine (Sbb_ a b)
+pattern And a b = CodeLine (And_ a b)
+pattern Sub a b = CodeLine (Sub_ a b)
+pattern Xor a b = CodeLine (Xor_ a b)
+pattern Cmp a b = CodeLine (Cmp_ a b)
+pattern Test a b = CodeLine (Test_ a b)
+pattern Mov a b = CodeLine (Mov_ a b)
+pattern Rol a b = CodeLine (Rol_ a b)
+pattern Ror a b = CodeLine (Ror_ a b)
+pattern Rcl a b = CodeLine (Rcl_ a b)
+pattern Rcr a b = CodeLine (Rcr_ a b)
+pattern Shl a b = CodeLine (Shl_ a b)
+pattern Shr a b = CodeLine (Shr_ a b)
+pattern Sar a b = CodeLine (Sar_ a b)
+pattern Xchg a b = CodeLine (Xchg_ a b)
+pattern Lea a b = CodeLine (Lea_ a b)
+pattern J a b = CodeLine (J_ a b)
+pattern Pop a = CodeLine (Pop_ a)
+pattern Push a = CodeLine (Push_ a)
+pattern Call a = CodeLine (Call_ a)
+pattern Jmpq a = CodeLine (Jmpq_ a)
+pattern Jmp = CodeLine (Jmp_)
+pattern Data a = CodeLine (Data_ a)
+pattern Align a = CodeLine (Align_ a)
+pattern Label = CodeLine (Label_)
+
+-------------
+
+showCode = \case
+    EmptyCode  -> return ()
+    AppendCode _ a b -> showCode a >> showCode b
+
+    Scope c -> get >>= \i -> put (i+1) >> local (i:) (showCode c)
+
+    Up c -> local tail $ showCode c
+
+    CodeLine x -> showCodeLine x
 
