@@ -22,11 +22,28 @@ callFun r p
   <> Call r 
   <> Add rsp (imm 32)
 
+#elif defined (darwin_HOST_OS)
+
+-- OSX requires 16 byte alignment of the stack...
+callFun :: Operand S64 RW -> FunPtr a -> Code
+callFun r p 
+  =  Push r15              -- we will use r15 (non-volatile) to store old rsp
+  <> Mov r15 (imm 15)      -- 0xf
+  <> Not r15               -- 0xffff ... fff0
+  <> And r15 rsp           -- align rsp into r15
+  <> Xchg r15 rsp          -- new rsp = aligned, r15 = old rsp
+  <> Mov r (imm $ fromIntegral $ ptrToIntPtr $ castFunPtrToPtr p) 
+  <> Call r 
+  <> Mov rsp r15           -- restore rsp
+  <> Pop r15               -- restore r15
+
 #else
 
 -- helper to call a function
 callFun :: Operand S64 RW -> FunPtr a -> Code
-callFun r p = Mov r (imm $ fromIntegral $ ptrToIntPtr $ castFunPtrToPtr p) <> Call r
+callFun r p 
+  =  Mov r (imm $ fromIntegral $ ptrToIntPtr $ castFunPtrToPtr p) 
+  <> Call r
 
 #endif
 
@@ -67,7 +84,7 @@ epilogue
     <> Pop rbx
     <> Pop rbp 
 
-#elif defined (linux_HOST_OS)
+#else
 
 ---------- System V calling convention ----------
 
