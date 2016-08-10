@@ -1,3 +1,7 @@
+# Version 0.1.4.1
+
+-   support automatic decision between short and near conditional jumps for forward references
+
 # Version 0.1.4
 
 -   OS X operating system support (Balázs Kőműves)

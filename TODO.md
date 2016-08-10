@@ -11,6 +11,7 @@
 -   codeBytes -> compile
 -   Bytes -> MachineCode ?
 -   Data -> DB
+-   traceReg -> traceOp
 
 # Documentation
 

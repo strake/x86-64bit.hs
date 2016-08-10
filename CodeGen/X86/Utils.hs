@@ -14,6 +14,7 @@ import System.Environment
 import Debug.Trace
 
 import CodeGen.X86.Asm
+import CodeGen.X86.CodeGen
 import CodeGen.X86.CallConv
 
 -------------------------------------------------------------- derived constructs
@@ -25,8 +26,11 @@ a <:> b = Scope $ a <.> b
 
 infixr 5 <:>, <.>
 
--- | near conditional forward jump (no auto size available for forward jumps)
-j = j32
+-- | auto size conditional forward jump
+j c x = if f $ mkCodeBuilder (Up x) then j8 c x else j32 c x        -- TODO: make this faster
+  where
+    f (ExactCodeBuilder len _) = len <= 127
+    f _ = False
 
 -- | short conditional forward jump
 j8 c x = J (Just S8) c <> Up x <:> mempty
