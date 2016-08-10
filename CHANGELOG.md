@@ -1,3 +1,10 @@
+# Version 0.1.4
+
+-   OS X operating system support (Balázs Kőműves)
+-   better show for db
+-   bugfix
+    -   save flags in traceReg
+
 # Version 0.1.3
 
 -   jmpq instruction support (George Stelle)
