@@ -292,11 +292,11 @@ instance Monoid (IndexReg s) where
     i `mappend` NoIndex = i
     NoIndex `mappend` i = i
 
-base :: Operand RW s -> Addr s
-base (RegOp x) = Addr (Just x) NoDisp NoIndex
+base :: Reg s -> Addr s
+base x = Addr (Just x) NoDisp NoIndex
 
-index :: Scale -> Operand RW s -> Addr s
-index sc (RegOp x) = Addr Nothing NoDisp (IndexReg sc x)
+index :: Scale -> Reg s -> Addr s
+index sc x = Addr Nothing NoDisp (IndexReg sc x)
 
 index1 = index s1
 index2 = index s2
@@ -310,9 +310,21 @@ instance Num (Addr s) where
     fromInteger = disp
     (+) = (<>)
 
-reg = RegOp . NormalReg
+class FromReg c where
+    fromReg :: Reg s -> c s
 
-rax, rcx, rdx, rbx, rsp, rbp, rsi, rdi, r8, r9, r10, r11, r12, r13, r14, r15 :: Operand rw S64
+instance FromReg Reg where
+    fromReg = id
+
+instance FromReg (Operand r) where
+    fromReg = RegOp
+
+instance FromReg Addr where
+    fromReg = base
+
+reg = fromReg . NormalReg
+
+rax, rcx, rdx, rbx, rsp, rbp, rsi, rdi, r8, r9, r10, r11, r12, r13, r14, r15 :: FromReg c => c S64
 rax  = reg 0x0
 rcx  = reg 0x1
 rdx  = reg 0x2
@@ -330,7 +342,7 @@ r13  = reg 0xd
 r14  = reg 0xe
 r15  = reg 0xf
 
-eax, ecx, edx, ebx, esp, ebp, esi, edi, r8d, r9d, r10d, r11d, r12d, r13d, r14d, r15d :: Operand rw S32
+eax, ecx, edx, ebx, esp, ebp, esi, edi, r8d, r9d, r10d, r11d, r12d, r13d, r14d, r15d :: FromReg c => c S32
 eax  = reg 0x0
 ecx  = reg 0x1
 edx  = reg 0x2
@@ -348,7 +360,7 @@ r13d = reg 0xd
 r14d = reg 0xe
 r15d = reg 0xf
 
-ax, cx, dx, bx, sp, bp, si, di, r8w, r9w, r10w, r11w, r12w, r13w, r14w, r15w :: Operand rw S16
+ax, cx, dx, bx, sp, bp, si, di, r8w, r9w, r10w, r11w, r12w, r13w, r14w, r15w :: FromReg c => c S16
 ax   = reg 0x0
 cx   = reg 0x1
 dx   = reg 0x2
@@ -366,7 +378,7 @@ r13w = reg 0xd
 r14w = reg 0xe
 r15w = reg 0xf
 
-al, cl, dl, bl, spl, bpl, sil, dil, r8b, r9b, r10b, r11b, r12b, r13b, r14b, r15b :: Operand rw S8
+al, cl, dl, bl, spl, bpl, sil, dil, r8b, r9b, r10b, r11b, r12b, r13b, r14b, r15b :: FromReg c => c S8
 al   = reg 0x0
 cl   = reg 0x1
 dl   = reg 0x2
@@ -384,10 +396,11 @@ r13b = reg 0xd
 r14b = reg 0xe
 r15b = reg 0xf
 
-ah   = RegOp $ HighReg 0x0
-ch   = RegOp $ HighReg 0x1
-dh   = RegOp $ HighReg 0x2
-bh   = RegOp $ HighReg 0x3
+ah, ch, dh, bh :: FromReg c => c S8
+ah   = fromReg $ HighReg 0x0
+ch   = fromReg $ HighReg 0x1
+dh   = fromReg $ HighReg 0x2
+bh   = fromReg $ HighReg 0x3
 
 pattern RegA = RegOp (NormalReg 0x0)
 

@@ -1,6 +1,6 @@
-
 -- | Calling conventions. There are basically only two: System V (Linux, OSX, BSD) and Win64\/fastcall
 
+{-# language NoMonomorphismRestriction #-}
 {-# language CPP #-}
 {-# language BangPatterns #-}
 {-# language DataKinds #-}

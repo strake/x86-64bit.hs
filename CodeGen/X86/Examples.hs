@@ -73,7 +73,7 @@ memTestFun v = do
     r <- mallocBytes 8                -- this is not required to be aligned (and in any case malloc aligns to machine words)
     pokeByteOff r 0 (v :: Word64)
     let code = saveNonVolatile 
-             $ Mov rdi arg1 <> Mov rax (addr $ base rdi)
+             $ Mov rdi arg1 <> Mov rax (addr rdi)
     return $ compile code r == v
 
 
