@@ -84,19 +84,19 @@ no64 s = s
 ------------------------------------------------------- code builder
 
 data CodeBuilder
-    = CodeBuilder (CodeBuilderState -> (CodeBuilderRes, CodeBuilderState))
-    | ExactCodeBuilder Int (CodeBuilderState -> (CodeBuilderRes, LabelState))   -- ^ CodeBuilder with known length
+    = CodeBuilder !Int !Int (CodeBuilderState -> (CodeBuilderRes, CodeBuilderState))
+    | ExactCodeBuilder !Int (CodeBuilderState -> (CodeBuilderRes, LabelState))   -- ^ CodeBuilder with known length
 
 codeBuilderLength (ExactCodeBuilder len _) = len
 
 buildCode :: CodeBuilder -> CodeBuilderState -> (CodeBuilderRes, CodeBuilderState)
-buildCode (CodeBuilder f) st = f st
+buildCode (CodeBuilder _ _ f) st = f st
 buildCode (ExactCodeBuilder len f) (n, st) = second ((,) (n + len)) $ f (n, st)
 
-mapLabelState g (CodeBuilder f) = CodeBuilder $ \(n, g -> (fx, xs)) -> second (second fx) $ f (n, xs)
+mapLabelState g (CodeBuilder i j f) = CodeBuilder i j $ \(n, g -> (fx, xs)) -> second (second fx) $ f (n, xs)
 mapLabelState g (ExactCodeBuilder len f) = ExactCodeBuilder len $ \(n, g -> (fx, xs)) -> second fx $ f (n, xs)
 
-censorCodeBuilder g (CodeBuilder f) = CodeBuilder $ \st -> first (g st) $ f st
+censorCodeBuilder g (CodeBuilder i j f) = CodeBuilder i j $ \st -> first (g st) $ f st
 censorCodeBuilder g (ExactCodeBuilder len f) = ExactCodeBuilder len $ \st -> first (g st) $ f st
 
 type CodeBuilderRes = [Either Int (Int, Word8)]
@@ -111,7 +111,13 @@ instance Monoid CodeBuilder where
             (a, st') = f st
             (b, st'') = g (len + fst st, st')
         in (a ++ b, st'')
-    f `mappend` g = CodeBuilder $ \(buildCode f -> (a, buildCode g -> (b, st))) -> (a ++ b, st)
+    f `mappend` g = CodeBuilder (i1+i2) (j1+j2) $ \(buildCode f -> (a, buildCode g -> (b, st))) -> (a ++ b, st)
+      where
+        (i1, j1) = bounds f
+        (i2, j2) = bounds g
+
+bounds (ExactCodeBuilder i _) = (i, i)
+bounds (CodeBuilder i j _) = (i, j)
 
 codeByte :: Word8 -> CodeBuilder
 codeByte c = ExactCodeBuilder 1 $ \(n, labs) -> ([Right (n, c)], labs)
@@ -136,8 +142,10 @@ mkRef s@(sizeLen -> sn) offset bs = ExactCodeBuilder sn f
             labs' = take bs labs ++ Left ((s, n, - n - offset): cs): drop (bs + 1) labs
 
 mkAutoRef :: [(Size, Bytes)] -> Int -> Int -> CodeBuilder
-mkAutoRef ss offset bs = CodeBuilder f
+mkAutoRef ss offset bs = CodeBuilder (minimum sizes) (maximum sizes) f
   where
+    sizes = map (\(s, c) -> sizeLen s + bytesCount c) ss
+
     f (n, labs) | bs >= length labs = error "missing scope"
     f (n, labs) = case labs !! bs of
         Left cs -> error "auto length computation for forward references is not supported"
@@ -285,12 +293,9 @@ mkCodeBuilder' = \case
             replL x (z: zs) = second (z:) $ replL x zs
 
     Data_ x -> bytesToCodeBuilder x
-    Align_ s -> CodeBuilder $ \(n, labs) -> let
-                    n' = fromIntegral $ (fromIntegral n - 1 :: Int64) .|. f s + 1
+    Align_ s -> CodeBuilder 0 (sizeLen s) $ \(n, labs) -> let
+                    n' = fromIntegral $ ((fromIntegral n - 1 :: Int64) .|. (sizeLen s - 1)) + 1
                 in (Right <$> zip [n..] (replicate (n' - n) 0x90), (n', labs))
-      where
-        f :: Size -> Int64
-        f s = sizeLen s - 1
   where
     convertImm :: Bool{-signed-} -> Size -> Operand r s -> First ((Bool, Size), CodeBuilder)
     convertImm a b (ImmOp (Immediate c)) = First $ (,) (a, b) . bytesToCodeBuilder <$> integralToBytes a b c
