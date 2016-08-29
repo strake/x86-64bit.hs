@@ -67,7 +67,7 @@ phisicalReg (SReg (NormalReg x)) = NormalReg x
 isHigh (SReg HighReg{}) = True
 isHigh _ = False
 
-regs :: forall s k . IsSize s => Operand s k -> [SReg]
+regs :: IsSize s => Operand r s -> [SReg]
 regs = \case
     MemOp (Addr r _ i) -> foldMap (pure . SReg) r ++ foldMap (pure . SReg . snd) i
     RegOp r -> [SReg r]
@@ -233,7 +233,7 @@ mkCodeBuilder' = \case
 
     Lea_ dest@(RegOp r) src | size dest /= S8 -> regprefix2 (resizeOperand' dest src) dest 0x46 $ reg8 (reg8_ r) src
       where
-        resizeOperand' :: IsSize s1 => Operand s1 x -> Operand s2 RW -> Operand s1 RW
+        resizeOperand' :: IsSize s1 => Operand x s1 -> Operand RW s2 -> Operand RW s1
         resizeOperand' _ = resizeOperand
 
     Not_  a -> op1 0x7b 0x2 a
@@ -292,24 +292,24 @@ mkCodeBuilder' = \case
         f :: Size -> Int64
         f s = sizeLen s - 1
   where
-    convertImm :: Bool{-signed-} -> Size -> Operand s k -> First ((Bool, Size), CodeBuilder)
+    convertImm :: Bool{-signed-} -> Size -> Operand r s -> First ((Bool, Size), CodeBuilder)
     convertImm a b (ImmOp (Immediate c)) = First $ (,) (a, b) . bytesToCodeBuilder <$> integralToBytes a b c
     convertImm True b (ImmOp (LabelRelValue s d)) | b == s = FJust $ (,) (True, b) $ mkRef s (sizeLen s) d
     convertImm _ _ _ = FNothing
 
-    mkImmS, mkImm, mkImmNo64 :: Size -> Operand s k -> First ((Bool, Size), CodeBuilder)
+    mkImmS, mkImm, mkImmNo64 :: Size -> Operand r s -> First ((Bool, Size), CodeBuilder)
     mkImmS = convertImm True
     mkImm  = convertImm False
     mkImmNo64 s = mkImmS (no64 s)
 
-    xchg_a :: IsSize s => Operand s a -> CodeBuilder
+    xchg_a :: IsSize s => Operand r s -> CodeBuilder
     xchg_a dest@(RegOp r) | size dest /= S8 = regprefix (size dest) dest (oneReg 0x12 r) mempty
     xchg_a dest = regprefix'' dest 0x43 (reg8 0x0 dest) mempty
 
     toCode :: HasBytes a => a -> CodeBuilder
     toCode = bytesToCodeBuilder . toBytes
 
-    sizePrefix_ :: [SReg] -> Size -> Operand s a -> Word8 -> CodeBuilder -> CodeBuilder -> CodeBuilder
+    sizePrefix_ :: [SReg] -> Size -> Operand r s -> Word8 -> CodeBuilder -> CodeBuilder -> CodeBuilder
     sizePrefix_ rs s r x c im
         | noHighRex rs = pre <> c <> displacement r <> im
         | otherwise = error "cannot use high register in rex instruction"
@@ -320,14 +320,14 @@ mkCodeBuilder' = \case
             S32 -> mem32pre r <> prefix40 x
             S64 -> mem32pre r <> prefix40 (0x8 .|. x)
 
-        mem32pre :: Operand s k -> CodeBuilder
+        mem32pre :: Operand r s -> CodeBuilder
         mem32pre (MemOp r@Addr{}) | size r == S32 = codeByte 0x67
         mem32pre _ = mempty
 
         prefix40 x = iff (x /= 0) $ prefix40_ x
         prefix40_ x = codeByte $ 0x40 .|. x
 
-        displacement :: Operand s a -> CodeBuilder
+        displacement :: Operand r s -> CodeBuilder
         displacement RegOp{} = mempty
         displacement (IPMemOp (Immediate d)) = toCode d
         displacement (IPMemOp (LabelRelValue s@S32 d)) = mkRef s (sizeLen s + fromIntegral (codeBuilderLength im)) d
@@ -351,19 +351,19 @@ mkCodeBuilder' = \case
     reg8_ (NormalReg r) = r .&. 0x7
     reg8_ (HighReg r) = r .|. 0x4
 
-    regprefix :: IsSize s => Size -> Operand s a -> CodeBuilder -> CodeBuilder -> CodeBuilder
+    regprefix :: IsSize s => Size -> Operand r s -> CodeBuilder -> CodeBuilder -> CodeBuilder
     regprefix s r c im = sizePrefix_ (regs r) s r (extbits r) c im
 
-    regprefix2 :: (IsSize s1, IsSize s) => Operand s1 a1 -> Operand s a -> Word8 -> CodeBuilder -> CodeBuilder
+    regprefix2 :: (IsSize s1, IsSize s) => Operand r1 s1 -> Operand r s -> Word8 -> CodeBuilder -> CodeBuilder
     regprefix2 r r' p c = sizePrefix_ (regs r <> regs r') (size r) r (extbits r' `shiftL` 2 .|. extbits r) (extension r p <> c) mempty
 
-    regprefix'' :: IsSize s => Operand s a -> Word8 -> CodeBuilder -> CodeBuilder -> CodeBuilder
+    regprefix'' :: IsSize s => Operand r s -> Word8 -> CodeBuilder -> CodeBuilder -> CodeBuilder
     regprefix'' r p c = regprefix (size r) r $ extension r p <> c
 
     extension :: HasSize a => a -> Word8 -> CodeBuilder
     extension x p = codeByte $ p `shiftL` 1 .|. indicator (size x /= S8)
 
-    extbits :: Operand s a -> Word8
+    extbits :: Operand r s -> Word8
     extbits = \case
         MemOp (Addr b _ i) -> maybe 0 indexReg b .|. maybe 0 ((`shiftL` 1) . indexReg . snd) i
         RegOp r -> indexReg r
@@ -372,10 +372,10 @@ mkCodeBuilder' = \case
         indexReg (NormalReg r) = r `shiftR` 3 .&. 1
         indexReg _ = 0
 
-    reg8 :: Word8 -> Operand s a -> CodeBuilder
+    reg8 :: Word8 -> Operand r s -> CodeBuilder
     reg8 w x = codeByte $ operMode x `shiftL` 6 .|. w `shiftL` 3 .|. rc x
       where
-        operMode :: Operand s a -> Word8
+        operMode :: Operand r s -> Word8
         operMode (MemOp (Addr (Just (reg8_ -> 0x5)) NoDisp _)) = 0x1   -- [rbp] --> [rbp + 0]
         operMode (MemOp (Addr Nothing _ _)) = 0x0
         operMode (MemOp (Addr _ NoDisp _))  = 0x0
@@ -384,42 +384,42 @@ mkCodeBuilder' = \case
         operMode IPMemOp{}                  = 0x0
         operMode RegOp{}                    = 0x3
 
-        rc :: Operand s a -> Word8
+        rc :: Operand r s -> Word8
         rc (MemOp (Addr (Just r) _ NoIndex)) = reg8_ r
         rc MemOp{}   = 0x04      -- SIB byte
         rc IPMemOp{} = 0x05
         rc (RegOp r) = reg8_ r
 
-    op2 :: IsSize s => Word8 -> Operand s RW -> Operand s k -> CodeBuilder
+    op2 :: IsSize s => Word8 -> Operand RW s -> Operand r s -> CodeBuilder
     op2 op dest@RegA src@(mkImmNo64 (size dest) -> FJust (_, im)) | size dest == S8 || isNothing (getFirst $ mkImmS S8 src)
         = regprefix'' dest (op `shiftL` 2 .|. 0x2) mempty im
     op2 op dest (mkImmS S8 <> mkImmNo64 (size dest) -> FJust ((_, k), im))
         = regprefix'' dest (0x40 .|. indicator (size dest /= S8 && k == S8)) (reg8 op dest) im
     op2 op dest src = op2' (op `shiftL` 2) dest $ noImm "1" src
 
-    noImm :: String -> Operand s k -> Operand s RW
+    noImm :: String -> Operand r s -> Operand RW s
     noImm _ (RegOp r) = RegOp r
     noImm _ (MemOp a) = MemOp a
     noImm _ (IPMemOp a) = IPMemOp a
     noImm er _ = error $ "immediate value of this size is not supported: " ++ er
 
-    op2' :: IsSize s => Word8 -> Operand s RW -> Operand s RW -> CodeBuilder
+    op2' :: IsSize s => Word8 -> Operand RW s -> Operand RW s -> CodeBuilder
     op2' op dest src@RegOp{} = op2g op dest src
     op2' op dest@RegOp{} src = op2g (op .|. 0x1) src dest
 
-    op2g :: (IsSize t, IsSize s) => Word8 -> Operand s a1 -> Operand t a -> CodeBuilder
+    op2g :: (IsSize t, IsSize s) => Word8 -> Operand r s -> Operand r' t -> CodeBuilder
     op2g op dest src@(RegOp r) = regprefix2 dest src op $ reg8 (reg8_ r) dest
 
-    op1_ :: IsSize s => Word8 -> Word8 -> Operand s a -> CodeBuilder -> CodeBuilder
+    op1_ :: IsSize s => Word8 -> Word8 -> Operand r s -> CodeBuilder -> CodeBuilder
     op1_ r1 r2 dest im = regprefix'' dest r1 (reg8 r2 dest) im
 
-    op1 :: IsSize s => Word8 -> Word8 -> Operand s a -> CodeBuilder
+    op1 :: IsSize s => Word8 -> Word8 -> Operand r s -> CodeBuilder
     op1 a b c = op1_ a b c mempty
 
-    op1' :: Word8 -> Word8 -> Operand S64 RW -> CodeBuilder
+    op1' :: Word8 -> Word8 -> Operand RW S64 -> CodeBuilder
     op1' r1 r2 dest = regprefix S32 dest (codeByte r1 <> reg8 r2 dest) mempty
 
-    shiftOp :: IsSize s => Word8 -> Operand s RW -> Operand S8 k -> CodeBuilder
+    shiftOp :: IsSize s => Word8 -> Operand RW s -> Operand r S8 -> CodeBuilder
     shiftOp c dest (ImmOp (Immediate 1)) = op1 0x68 c dest
     shiftOp c dest (mkImm S8 -> FJust (_, i)) = op1_ 0x60 c dest i
     shiftOp c dest RegCl = op1 0x69 c dest

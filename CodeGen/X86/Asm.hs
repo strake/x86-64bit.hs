@@ -155,24 +155,24 @@ scaleFactor (Scale i) = case i of
 
 ------------------------------------------------------- operand
 
-data Operand :: Size -> Access -> * where
-    ImmOp     :: Immediate Int64 -> Operand s R
-    RegOp     :: Reg s -> Operand s rw
-    MemOp     :: IsSize s' => Addr s' -> Operand s rw
-    IPMemOp   :: Immediate Int32 -> Operand s rw
+data Operand :: Access -> Size -> * where
+    ImmOp     :: Immediate Int64 -> Operand R s
+    RegOp     :: Reg s -> Operand rw s
+    MemOp     :: IsSize s' => Addr s' -> Operand rw s
+    IPMemOp   :: Immediate Int32 -> Operand rw s
 
 addr = MemOp
 
-addr8 :: IsSize s => Addr s -> Operand S8 rw
+addr8 :: IsSize s => Addr s -> Operand rw S8
 addr8 = addr
 
-addr16 :: IsSize s => Addr s -> Operand S16 rw
+addr16 :: IsSize s => Addr s -> Operand rw S16
 addr16 = addr
 
-addr32 :: IsSize s => Addr s -> Operand S32 rw
+addr32 :: IsSize s => Addr s -> Operand rw S32
 addr32 = addr
 
-addr64 :: IsSize s => Addr s -> Operand S64 rw
+addr64 :: IsSize s => Addr s -> Operand rw S64
 addr64 = addr
 
 data Immediate a
@@ -245,7 +245,7 @@ instance IsSize s => Show (Addr s) where
         f True = " + "
         f False = " - "
 
-instance IsSize s => Show (Operand s a) where
+instance IsSize s => Show (Operand a s) where
     show = showOperand show
 
 showOperand mklab = \case
@@ -261,7 +261,7 @@ showOperand mklab = \case
     showImm (Immediate x) = show x
     showImm (LabelRelValue _ x) = mklab x
 
-instance IsSize s => HasSize (Operand s a) where
+instance IsSize s => HasSize (Operand a s) where
     size _ = size (ssize :: SSize s)
 
 instance IsSize s => HasSize (Addr s) where
@@ -276,10 +276,10 @@ instance IsSize s => HasSize (Reg s) where
 instance IsSize s => HasSize (IndexReg s) where
     size _ = size (ssize :: SSize s)
 
-imm :: (Integral a, Bits a) => a -> Operand s R
+imm :: (Integral a, Bits a) => a -> Operand R s
 imm (Integral x) = ImmOp $ Immediate x
 
-instance (r ~ R) => Num (Operand s r) where
+instance (rw ~ R) => Num (Operand rw s) where
     negate (ImmOp (Immediate x)) = imm (negate x)
     fromInteger = imm
 
@@ -292,10 +292,10 @@ instance Monoid (IndexReg s) where
     i `mappend` NoIndex = i
     NoIndex `mappend` i = i
 
-base :: Operand s RW -> Addr s
+base :: Operand RW s -> Addr s
 base (RegOp x) = Addr (Just x) NoDisp NoIndex
 
-index :: Scale -> Operand s RW -> Addr s
+index :: Scale -> Operand RW s -> Addr s
 index sc (RegOp x) = Addr Nothing NoDisp (IndexReg sc x)
 
 index1 = index s1
@@ -312,7 +312,7 @@ instance Num (Addr s) where
 
 reg = RegOp . NormalReg
 
-rax, rcx, rdx, rbx, rsp, rbp, rsi, rdi, r8, r9, r10, r11, r12, r13, r14, r15 :: Operand S64 rw
+rax, rcx, rdx, rbx, rsp, rbp, rsi, rdi, r8, r9, r10, r11, r12, r13, r14, r15 :: Operand rw S64
 rax  = reg 0x0
 rcx  = reg 0x1
 rdx  = reg 0x2
@@ -330,7 +330,7 @@ r13  = reg 0xd
 r14  = reg 0xe
 r15  = reg 0xf
 
-eax, ecx, edx, ebx, esp, ebp, esi, edi, r8d, r9d, r10d, r11d, r12d, r13d, r14d, r15d :: Operand S32 rw
+eax, ecx, edx, ebx, esp, ebp, esi, edi, r8d, r9d, r10d, r11d, r12d, r13d, r14d, r15d :: Operand rw S32
 eax  = reg 0x0
 ecx  = reg 0x1
 edx  = reg 0x2
@@ -348,7 +348,7 @@ r13d = reg 0xd
 r14d = reg 0xe
 r15d = reg 0xf
 
-ax, cx, dx, bx, sp, bp, si, di, r8w, r9w, r10w, r11w, r12w, r13w, r14w, r15w :: Operand S16 rw
+ax, cx, dx, bx, sp, bp, si, di, r8w, r9w, r10w, r11w, r12w, r13w, r14w, r15w :: Operand rw S16
 ax   = reg 0x0
 cx   = reg 0x1
 dx   = reg 0x2
@@ -366,7 +366,7 @@ r13w = reg 0xd
 r14w = reg 0xe
 r15w = reg 0xf
 
-al, cl, dl, bl, spl, bpl, sil, dil, r8b, r9b, r10b, r11b, r12b, r13b, r14b, r15b :: Operand S8 rw
+al, cl, dl, bl, spl, bpl, sil, dil, r8b, r9b, r10b, r11b, r12b, r13b, r14b, r15b :: Operand rw S8
 al   = reg 0x0
 cl   = reg 0x1
 dl   = reg 0x2
@@ -391,12 +391,12 @@ bh   = RegOp $ HighReg 0x3
 
 pattern RegA = RegOp (NormalReg 0x0)
 
-pattern RegCl :: Operand S8 r
+pattern RegCl :: Operand r S8
 pattern RegCl = RegOp (NormalReg 0x1)
 
 --------------------------------------------------------------
 
-resizeOperand :: IsSize s' => Operand s RW -> Operand s' RW
+resizeOperand :: IsSize s' => Operand RW s -> Operand RW s'
 resizeOperand (RegOp x) = RegOp $ resizeRegCode x
 resizeOperand (MemOp a) = MemOp a
 resizeOperand (IPMemOp a) = IPMemOp a
@@ -463,18 +463,18 @@ instance Show Condition where
 data CodeLine where
     Ret_, Nop_, PushF_, PopF_, Cmc_, Clc_, Stc_, Cli_, Sti_, Cld_, Std_   :: CodeLine
 
-    Inc_, Dec_, Not_, Neg_                                :: IsSize s => Operand s RW -> CodeLine
-    Add_, Or_, Adc_, Sbb_, And_, Sub_, Xor_, Cmp_, Test_, Mov_  :: IsSize s => Operand s RW -> Operand s  r -> CodeLine
-    Rol_, Ror_, Rcl_, Rcr_, Shl_, Shr_, Sar_                 :: IsSize s => Operand s RW -> Operand S8 r -> CodeLine
+    Inc_, Dec_, Not_, Neg_                                :: IsSize s => Operand RW s -> CodeLine
+    Add_, Or_, Adc_, Sbb_, And_, Sub_, Xor_, Cmp_, Test_, Mov_  :: IsSize s => Operand RW s -> Operand r s -> CodeLine
+    Rol_, Ror_, Rcl_, Rcr_, Shl_, Shr_, Sar_                 :: IsSize s => Operand RW s -> Operand r S8 -> CodeLine
 
-    Xchg_ :: IsSize s => Operand s RW -> Operand s RW -> CodeLine
-    Lea_  :: (IsSize s, IsSize s') => Operand s RW -> Operand s' RW -> CodeLine
+    Xchg_ :: IsSize s => Operand RW s -> Operand RW s -> CodeLine
+    Lea_  :: (IsSize s, IsSize s') => Operand RW s -> Operand RW s' -> CodeLine
 
-    Pop_  :: Operand S64 RW -> CodeLine
-    Push_ :: Operand S64 r  -> CodeLine
+    Pop_  :: Operand RW S64 -> CodeLine
+    Push_ :: Operand r  S64 -> CodeLine
 
-    Call_ :: Operand S64 RW -> CodeLine
-    Jmpq_ :: Operand S64 RW -> CodeLine
+    Call_ :: Operand RW S64 -> CodeLine
+    Jmpq_ :: Operand RW S64 -> CodeLine
 
     J_    :: Maybe Size -> Condition -> CodeLine
     Jmp_  :: CodeLine

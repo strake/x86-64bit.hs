@@ -123,14 +123,14 @@ instance Arbitrary (Addr S64) where
 
 genMems = MemOp <$> (arbitrary :: Gen (Addr S64))
 
-instance IsSize s => Arbitrary (Operand s RW) where
+instance IsSize s => Arbitrary (Operand RW s) where
     arbitrary = oneof
         [ genRegs
         , genMems
         , genIPBase
         ]
 
-instance IsSize s => Arbitrary (Operand s R) where
+instance IsSize s => Arbitrary (Operand R s) where
     arbitrary = oneof
         [ imm <$> oneof (arbVal <$> [S8, S16, S32, S64])
         , genRegs
@@ -159,34 +159,34 @@ instance Arbitrary Code where
         , op2'' Mov
         ]
       where
-        op2 :: (forall s . IsSize s => Operand s RW -> Operand s R -> Code) -> Gen Code
+        op2 :: (forall s . IsSize s => Operand RW s -> Operand R s -> Code) -> Gen Code
         op2 op = oneof
-            [ f op (arbitrary :: Gen (Operand S8 RW))  arbitrary
-            , f op (arbitrary :: Gen (Operand S16 RW)) arbitrary
-            , f op (arbitrary :: Gen (Operand S32 RW)) arbitrary
-            , f op (arbitrary :: Gen (Operand S64 RW)) arbitrary
+            [ f op (arbitrary :: Gen (Operand RW S8))  arbitrary
+            , f op (arbitrary :: Gen (Operand RW S16)) arbitrary
+            , f op (arbitrary :: Gen (Operand RW S32)) arbitrary
+            , f op (arbitrary :: Gen (Operand RW S64)) arbitrary
             ]
           where
-            f :: forall s . IsSize s => (Operand s RW -> Operand s R -> Code) -> Gen (Operand s RW) -> Gen (Operand s R) -> Gen Code
+            f :: forall s . IsSize s => (Operand RW s -> Operand R s -> Code) -> Gen (Operand RW s) -> Gen (Operand R s) -> Gen Code
             f op a b = uncurry op <$> suchThat ((,) <$> a <*> b) (\(a, b) -> noHighRex (regs a <> regs b) && ok' a b && okk a b)
 
-        op2'' :: (forall s . IsSize s => Operand s RW -> Operand s R -> Code) -> Gen Code
+        op2'' :: (forall s . IsSize s => Operand RW s -> Operand R s -> Code) -> Gen Code
         op2'' op = oneof
-            [ f op (arbitrary :: Gen (Operand S8 RW))  arbitrary
-            , f op (arbitrary :: Gen (Operand S16 RW)) arbitrary
-            , f op (arbitrary :: Gen (Operand S32 RW)) arbitrary
-            , f op (arbitrary :: Gen (Operand S64 RW)) arbitrary
+            [ f op (arbitrary :: Gen (Operand RW S8))  arbitrary
+            , f op (arbitrary :: Gen (Operand RW S16)) arbitrary
+            , f op (arbitrary :: Gen (Operand RW S32)) arbitrary
+            , f op (arbitrary :: Gen (Operand RW S64)) arbitrary
             ]
           where
-            f :: forall s . IsSize s => (Operand s RW -> Operand s R -> Code) -> Gen (Operand s RW) -> Gen (Operand s R) -> Gen Code
+            f :: forall s . IsSize s => (Operand RW s -> Operand R s -> Code) -> Gen (Operand RW s) -> Gen (Operand R s) -> Gen Code
             f op a b = uncurry op <$> suchThat ((,) <$> a <*> b) (\(a, b) -> noHighRex (regs a <> regs b) && ok' a b && oki a b)
 
-        op2' :: (forall s . IsSize s => Operand s RW -> Operand S8 R -> Code) -> Gen Code
+        op2' :: (forall s . IsSize s => Operand RW s -> Operand R S8 -> Code) -> Gen Code
         op2' op = oneof
-            [ f op (arbitrary :: Gen (Operand S8 RW))  arb
-            , f op (arbitrary :: Gen (Operand S16 RW)) arb
-            , f op (arbitrary :: Gen (Operand S32 RW)) arb
-            , f op (arbitrary :: Gen (Operand S64 RW)) arb
+            [ f op (arbitrary :: Gen (Operand RW S8))  arb
+            , f op (arbitrary :: Gen (Operand RW S16)) arb
+            , f op (arbitrary :: Gen (Operand RW S32)) arb
+            , f op (arbitrary :: Gen (Operand RW S64)) arb
             ]
           where
             arb = oneof
@@ -194,7 +194,7 @@ instance Arbitrary Code where
                 , return cl
                 ]
 
-            f :: forall s . IsSize s => (Operand s RW -> Operand S8 R -> Code) -> Gen (Operand s RW) -> Gen (Operand S8 R) -> Gen Code
+            f :: forall s . IsSize s => (Operand RW s -> Operand R S8 -> Code) -> Gen (Operand RW s) -> Gen (Operand R S8) -> Gen Code
             f op a b = uncurry op <$> suchThat ((,) <$> a <*> b) (\(a, b) -> noHighRex (regs a <> regs b) && ok' a b && okk a b && noteqreg a b)
 
         noteqreg a b = x == nub x where x = map phisicalReg $ regs a ++ regs b
@@ -271,13 +271,13 @@ instance Arbitrary InstrTest where
     arbitrary = do
         i <- arbitrary
         cF <- arbitrary
-        let   fff :: forall s s' r . (IsSize s, IsSize s') => Code -> (Operand s RW -> Operand s' r -> Code) -> Operand s RW -> Operand s' r -> Gen InstrTest
+        let   fff :: forall s s' r . (IsSize s, IsSize s') => Code -> (Operand RW s -> Operand r s' -> Code) -> Operand RW s -> Operand r s' -> Gen InstrTest
               fff op op' a b = do
                 let
                     (f1: f2: _) = map RegOp $ filter (`notElem` (regi a ++ regi b)) $ NormalReg <$> [8..15]
                     regi = map phisicalReg . regs
 
-                    ff :: Operand s RW -> Operand s' k -> Gen (Int64, Int64, Code -> Code)
+                    ff :: Operand RW s -> Operand k s' -> Gen (Int64, Int64, Code -> Code)
                     ff a@(RegOp x) (RegOp x') | Just Refl <- sizeEqCheck x x', x == x' = do
                         (av, inita) <- mkVal f2 a
                         return (av, av, inita)
@@ -315,8 +315,8 @@ instance Arbitrary InstrTest where
                     otest i x | isShift i = x
                     otest _ x = if_ (if oF' then O else NO) (Xor rax rax) x
 
-                    rcx' = resizeOperand rcx :: Operand s RW
-                    rdx' = resizeOperand rdx :: Operand s RW
+                    rcx' = resizeOperand rcx :: Operand RW s
+                    rdx' = resizeOperand rdx :: Operand RW s
                     sa = size a
 
                     ((cF', oF'), res) = case sa of
@@ -349,7 +349,7 @@ instance Arbitrary InstrTest where
             Mov a_ b_ -> fff i Mov a_ b_
 
       where
-        mkVal :: IsSize s => Operand S64 RW -> Operand s k -> Gen (Int64, Code -> Code)
+        mkVal :: IsSize s => Operand RW S64 -> Operand k s -> Gen (Int64, Code -> Code)
         mkVal _ o@(ImmOp (Immediate w)) = return (w, id)
         mkVal _ o@(RegOp x) = do
             v <- arbVal $ size o
@@ -368,7 +368,7 @@ instance Arbitrary InstrTest where
                 d' = (vi :: Int64) + case d of
                     NoDisp -> 0
                     Disp v -> fromIntegral v
-                rx = resizeOperand $ RegOp x :: Operand S64 RW
+                rx = resizeOperand $ RegOp x :: Operand RW S64
             return (v, ((leaData rx v <> Mov helper (imm d') <> Sub rx helper <> setvi) <>))
         mkVal helper o@(MemOp (Addr Nothing d (Just (sc, x)))) = do
             v <- arbVal $ size o
@@ -376,7 +376,7 @@ instance Arbitrary InstrTest where
                 d' = case d of
                     NoDisp -> 0 :: Int64
                     Disp v -> fromIntegral v
-                rx = resizeOperand $ RegOp x :: Operand S64 RW
+                rx = resizeOperand $ RegOp x :: Operand RW S64
             return (v, ((leaData rx v <> Mov helper (imm d') <> Sub rx helper) <>))
 
 

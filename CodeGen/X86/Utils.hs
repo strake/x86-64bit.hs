@@ -49,7 +49,7 @@ x `j_back32` c = mempty <:> Up x <> J (Just S32) c
 
 if_ c a b = (J (Just S8) c <> Up (Up a <> Jmp) <:> mempty) <> Up b <:> mempty
 
-lea8 :: IsSize s => Operand s RW -> Operand S8 RW -> Code
+lea8 :: IsSize s => Operand RW s -> Operand RW S8 -> Code
 lea8 = Lea
 
 leaData r d = (lea8 r ipBase <> Up Jmp <:> mempty) <> Data (toBytes d) <:> mempty
@@ -61,8 +61,8 @@ foreign import ccall "static stdio.h &printf" printf :: FunPtr a
 ------------------------------------------------------------------------------ 
 -- * utils
 
-mov' :: forall s s' r . IsSize s' => Operand s RW -> Operand s' r -> Code
-mov' a b = Mov (resizeOperand a :: Operand s' RW) b
+mov' :: forall s s' r . IsSize s' => Operand RW s -> Operand r s' -> Code
+mov' a b = Mov (resizeOperand a :: Operand RW s') b
 
 newtype CString = CString String
 
@@ -70,13 +70,13 @@ instance HasBytes CString where
     toBytes (CString cs) = mconcat $ toBytes . (fromIntegral :: Int -> Word8) . fromEnum <$> (cs ++ "\0")
 
 -- | we should implement PUSHA and POPA later
-all_regs_except_rsp :: [Operand S64 rw]
+all_regs_except_rsp :: [Operand rw S64]
 all_regs_except_rsp = [ rax, rcx, rdx, rbx, {- rsp, -} rbp, rsi, rdi, r8, r9, r10, r11, r12, r13, r14, r15 ]
 
 push_all = mconcat [ Push r | r <-         all_regs_except_rsp ]
 pop_all  = mconcat [ Pop  r | r <- reverse all_regs_except_rsp ]
 
-traceReg :: IsSize s => String -> Operand s RW -> Code
+traceReg :: IsSize s => String -> Operand RW s -> Code
 traceReg d r = 
        PushF <> push_all
     <> mov' arg2 r <> leaData arg1 (CString $ show r ++ " = %" ++ s ++ d ++ "\n") <> Xor rax rax <> callFun r11 printf

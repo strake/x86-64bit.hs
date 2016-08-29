@@ -17,7 +17,7 @@ import CodeGen.X86.CodeGen
 #if defined (mingw32_HOST_OS) || defined (mingw64_HOST_OS)
 
 -- On Win64 the caller have to reserve 32 byte "shadow space" on the stack (and clean up after)
-callFun :: Operand S64 RW -> FunPtr a -> Code
+callFun :: Operand RW S64 -> FunPtr a -> Code
 callFun r p 
   =  Sub rsp 32
   <> Mov r (imm $ ptrToIntPtr $ castFunPtrToPtr p)
@@ -27,7 +27,7 @@ callFun r p
 #elif defined (darwin_HOST_OS)
 
 -- OSX requires 16 byte alignment of the stack...
-callFun :: Operand S64 RW -> FunPtr a -> Code
+callFun :: Operand RW S64 -> FunPtr a -> Code
 callFun r p 
   =  Push r15              -- we will use r15 (non-volatile) to store old rsp
   <> Mov r15 15            -- 0xf
@@ -42,7 +42,7 @@ callFun r p
 #else
 
 -- helper to call a function
-callFun :: Operand S64 RW -> FunPtr a -> Code
+callFun :: Operand RW S64 -> FunPtr a -> Code
 callFun r p 
   =  Mov r (imm $ ptrToIntPtr $ castFunPtrToPtr p)
   <> Call r
