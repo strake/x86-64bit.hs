@@ -524,6 +524,7 @@ data CodeLine where
     Add_, Or_, Adc_, Sbb_, And_, Sub_, Xor_, Cmp_, Test_, Mov_  :: IsSize s => Operand RW s -> Operand r s -> CodeLine
     Rol_, Ror_, Rcl_, Rcr_, Shl_, Shr_, Sar_                 :: IsSize s => Operand RW s -> Operand r S8 -> CodeLine
 
+    Cmov_ :: IsSize s => Condition -> Operand RW s -> Operand RW s -> CodeLine
     Xchg_ :: IsSize s => Operand RW s -> Operand RW s -> CodeLine
     Lea_  :: (IsSize s, IsSize s') => Operand RW s -> Operand RW s' -> CodeLine
 
@@ -533,7 +534,7 @@ data CodeLine where
     Call_ :: Operand RW S64 -> CodeLine
     Jmpq_ :: Operand RW S64 -> CodeLine
 
-    J_    :: Maybe Size -> Condition -> CodeLine
+    J_    :: Condition -> Maybe Size -> CodeLine
     Jmp_  :: Maybe Size -> CodeLine
 
     Label_ :: CodeLine
@@ -569,13 +570,14 @@ showCodeLine = \case
     Cmp_  op1 op2 -> showOp2 "cmp"  op1 op2
     Test_ op1 op2 -> showOp2 "test" op1 op2
     Rol_  op1 op2 -> showOp2 "rol"  op1 op2
-    Ror_  op1 op2 -> showOp2 "rol"  op1 op2
-    Rcl_  op1 op2 -> showOp2 "rol"  op1 op2
-    Rcr_  op1 op2 -> showOp2 "rol"  op1 op2
-    Shl_  op1 op2 -> showOp2 "rol"  op1 op2
-    Shr_  op1 op2 -> showOp2 "rol"  op1 op2
-    Sar_  op1 op2 -> showOp2 "rol"  op1 op2
+    Ror_  op1 op2 -> showOp2 "ror"  op1 op2
+    Rcl_  op1 op2 -> showOp2 "rcl"  op1 op2
+    Rcr_  op1 op2 -> showOp2 "rcr"  op1 op2
+    Shl_  op1 op2 -> showOp2 "shl"  op1 op2
+    Shr_  op1 op2 -> showOp2 "shr"  op1 op2
+    Sar_  op1 op2 -> showOp2 "sar"  op1 op2
     Mov_  op1 op2 -> showOp2 "mov"  op1 op2
+    Cmov_ cc op1 op2 -> showOp2 ("cmov" ++ show cc) op1 op2
     Lea_  op1 op2 -> showOp2 "lea"  op1 op2
     Xchg_ op1 op2 -> showOp2 "xchg" op1 op2
     Inc_  op -> showOp1 "inc"  op
@@ -605,7 +607,7 @@ showCodeLine = \case
       where
         isPrint c = c >= 32 && c <= 126
 
-    J_ s cc -> getLabel 0 >>= \l -> showOp ("j" ++ show cc) $ (case s of Just S8 -> "short "; Just S32 -> "near "; _ -> "") ++ l
+    J_ cc s -> getLabel 0 >>= \l -> showOp ("j" ++ show cc) $ (case s of Just S8 -> "short "; Just S32 -> "near "; _ -> "") ++ l
     Jmp_ s  -> getLabel 0 >>= \l -> showOp "jmp" $ (case s of Just S8 -> "short "; Just S32 -> "near "; _ -> "") ++ l
     Label_  -> getLabel 0 >>= codeLine
 

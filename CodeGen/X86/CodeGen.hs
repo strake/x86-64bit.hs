@@ -236,7 +236,9 @@ mkCodeBuilder' = \case
     Mov_ dest@(size -> s) (mkImmNo64 s -> FJust (_, im)) -> regprefix'' dest 0x63 (reg8 0x0 dest) im
     Mov_ dest src -> op2' 0x44 dest $ noImm (show (dest, src)) src
 
-    Lea_ dest@(RegOp r) src | size dest /= S8 -> regprefix2 (resizeOperand' dest src) dest 0x46 $ reg8 (reg8_ r) src
+    Cmov_ (Condition c) dest src | size dest /= S8 -> regprefix2 src dest $ codeByte 0x0f <> codeByte (0x40 .|. c) <> reg2x8 dest src
+
+    Lea_ dest src | size dest /= S8 -> regprefix2' (resizeOperand' dest src) dest 0x46 $ reg2x8 dest src
       where
         resizeOperand' :: IsSize s1 => Operand x s1 -> Operand RW s2 -> Operand RW s1
         resizeOperand' _ = resizeOperand
@@ -268,9 +270,9 @@ mkCodeBuilder' = \case
     Cld_   -> codeByte 0xfc
     Std_   -> codeByte 0xfd
 
-    J_ (Just S8)  (Condition c) -> codeByte (0x70 .|. c) <> mkRef S8 1 0
-    J_ (Just S32) (Condition c) -> codeByte 0x0f <> codeByte (0x80 .|. c) <> mkRef S32 4 0
-    J_ Nothing    (Condition c) -> mkAutoRef [(S8, Bytes [0x70 .|. c]), (S32, Bytes [0x0f, 0x80 .|. c])] 0 0
+    J_ (Condition c) (Just S8)  -> codeByte (0x70 .|. c) <> mkRef S8 1 0
+    J_ (Condition c) (Just S32) -> codeByte 0x0f <> codeByte (0x80 .|. c) <> mkRef S32 4 0
+    J_ (Condition c) Nothing    -> mkAutoRef [(S8, Bytes [0x70 .|. c]), (S32, Bytes [0x0f, 0x80 .|. c])] 0 0
 
     Jmp_ (Just S8)  -> codeByte 0xeb <> mkRef S8 1 0
     Jmp_ (Just S32) -> codeByte 0xe9 <> mkRef S32 4 0
@@ -357,11 +359,14 @@ mkCodeBuilder' = \case
     regprefix :: IsSize s => Size -> Operand r s -> CodeBuilder -> CodeBuilder -> CodeBuilder
     regprefix s r c im = sizePrefix_ (regs r) s r (extbits r) c im
 
-    regprefix2 :: (IsSize s1, IsSize s) => Operand r1 s1 -> Operand r s -> Word8 -> CodeBuilder -> CodeBuilder
-    regprefix2 r r' p c = sizePrefix_ (regs r <> regs r') (size r) r (extbits r' `shiftL` 2 .|. extbits r) (extension r p <> c) mempty
+    regprefix2 :: (IsSize s1, IsSize s) => Operand r1 s1 -> Operand r s -> CodeBuilder -> CodeBuilder
+    regprefix2 r r' c = sizePrefix_ (regs r <> regs r') (size r) r (extbits r' `shiftL` 2 .|. extbits r) c mempty
 
     regprefix'' :: IsSize s => Operand r s -> Word8 -> CodeBuilder -> CodeBuilder -> CodeBuilder
     regprefix'' r p c = regprefix (size r) r $ extension r p <> c
+
+    regprefix2' :: (IsSize s1, IsSize s) => Operand r1 s1 -> Operand r s -> Word8 -> CodeBuilder -> CodeBuilder
+    regprefix2' r r' p c = regprefix2 r r' $ extension r p <> c
 
     extension :: HasSize a => a -> Word8 -> CodeBuilder
     extension x p = codeByte $ p `shiftL` 1 .|. indicator (size x /= S8)
@@ -411,7 +416,9 @@ mkCodeBuilder' = \case
     op2' op dest@RegOp{} src = op2g (op .|. 0x1) src dest
 
     op2g :: (IsSize t, IsSize s) => Word8 -> Operand r s -> Operand r' t -> CodeBuilder
-    op2g op dest src@(RegOp r) = regprefix2 dest src op $ reg8 (reg8_ r) dest
+    op2g op dest src = regprefix2' dest src op $ reg2x8 src dest
+
+    reg2x8 (RegOp r) x = reg8 (reg8_ r) x
 
     op1_ :: IsSize s => Word8 -> Word8 -> Operand r s -> CodeBuilder -> CodeBuilder
     op1_ r1 r2 dest im = regprefix'' dest r1 (reg8 r2 dest) im
@@ -473,6 +480,7 @@ pattern Xor a b = CodeLine (Xor_ a b)
 pattern Cmp a b = CodeLine (Cmp_ a b)
 pattern Test a b = CodeLine (Test_ a b)
 pattern Mov a b = CodeLine (Mov_ a b)
+pattern Cmov c a b = CodeLine (Cmov_ c a b)
 pattern Rol a b = CodeLine (Rol_ a b)
 pattern Ror a b = CodeLine (Ror_ a b)
 pattern Rcl a b = CodeLine (Rcl_ a b)

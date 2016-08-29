@@ -42,21 +42,21 @@ jmp32 = Jmp $ Just S32
 j c x = if snd (bounds $ mkCodeBuilder x) <= 127 then j8 c x else j32 c x
 
 -- | short conditional forward jump
-j8 c x = J (Just S8) c <> Up x <:> mempty
+j8 c x = J c (Just S8) <> Up x <:> mempty
 
 -- | near conditional forward jump
-j32 c x = J (Just S32) c <> Up x <:> mempty
+j32 c x = J c (Just S32) <> Up x <:> mempty
 
 -- | auto size conditional backward jump
-x `j_back` c = mempty <:> Up x <> J Nothing c
+x `j_back` c = mempty <:> Up x <> J c Nothing
 
 -- | short conditional backward jump
-x `j_back8` c = mempty <:> Up x <> J (Just S8) c
+x `j_back8` c = mempty <:> Up x <> J c (Just S8)
 
 -- | near conditional backward jump
-x `j_back32` c = mempty <:> Up x <> J (Just S32) c
+x `j_back32` c = mempty <:> Up x <> J c (Just S32)
 
-if_ c a b = (J (Just S8) c <> Up (Up a <> jmp b) <:> mempty) <> Up b <:> mempty
+if_ c a b = (J c (Just S8) <> Up (Up a <> jmp b) <:> mempty) <> Up b <:> mempty
 
 lea8 :: IsSize s => Operand RW s -> Operand RW S8 -> Code
 lea8 = Lea

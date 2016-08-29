@@ -81,6 +81,7 @@ module CodeGen.X86
     , pattern Cmp
     , pattern Test
     , pattern Mov
+    , pattern Cmov
     , pattern Rol
     , pattern Ror
     , pattern Rcl
