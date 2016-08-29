@@ -104,7 +104,10 @@ module CodeGen.X86
     -- * Compound assembly codes
     , (<>)
     , (<.>), (<:>)
-    , j, j8, j32, j_back, j_back8, j_back32, if_
+    , jmp, jmp_back, jmp8, jmp32
+    , j, j8, j32
+    , j_back, j_back8, j_back32
+    , if_
     , lea8
     , leaData
     -- * Compilation

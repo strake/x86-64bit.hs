@@ -272,8 +272,9 @@ mkCodeBuilder' = \case
     J_ (Just S32) (Condition c) -> codeByte 0x0f <> codeByte (0x80 .|. c) <> mkRef S32 4 0
     J_ Nothing    (Condition c) -> mkAutoRef [(S8, Bytes [0x70 .|. c]), (S32, Bytes [0x0f, 0x80 .|. c])] 0 0
 
-    -- short jump
-    Jmp_ -> codeByte 0xeb <> mkRef S8 1 0
+    Jmp_ (Just S8)  -> codeByte 0xeb <> mkRef S8 1 0
+    Jmp_ (Just S32) -> codeByte 0xe9 <> mkRef S32 4 0
+    Jmp_ Nothing    -> mkAutoRef [(S8, Bytes [0xeb]), (S32, Bytes [0xe9])] 0 0
 
     Label_ -> ExactCodeBuilder 0 lab
       where
@@ -486,7 +487,7 @@ pattern Pop a = CodeLine (Pop_ a)
 pattern Push a = CodeLine (Push_ a)
 pattern Call a = CodeLine (Call_ a)
 pattern Jmpq a = CodeLine (Jmpq_ a)
-pattern Jmp = CodeLine (Jmp_)
+pattern Jmp a  = CodeLine (Jmp_  a)
 pattern Data a = CodeLine (Data_ a)
 pattern Align a = CodeLine (Align_ a)
 pattern Label = CodeLine (Label_)

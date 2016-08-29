@@ -356,7 +356,7 @@ instance Arbitrary InstrTest where
             return (v, (Mov (RegOp x) (imm v) <>))
         mkVal helper x@(IPMemOp LabelRelValue{}) = do
             v <- arbVal $ size x
-            return (v, \c -> Scope $ Up Jmp {- <> align (size x) -} <:> Data (toBytes v) <.> c)
+            return (v, \c -> Scope $ Up jmp8 {- <> align (size x) -} <:> Data (toBytes v) <.> c)
         mkVal helper o@(MemOp (Addr (Just x) d i)) = do
             v <- arbVal $ size o
             (vi, setvi) <- case i of

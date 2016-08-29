@@ -534,7 +534,7 @@ data CodeLine where
     Jmpq_ :: Operand RW S64 -> CodeLine
 
     J_    :: Maybe Size -> Condition -> CodeLine
-    Jmp_  :: CodeLine
+    Jmp_  :: Maybe Size -> CodeLine
 
     Label_ :: CodeLine
 
@@ -606,6 +606,6 @@ showCodeLine = \case
         isPrint c = c >= 32 && c <= 126
 
     J_ s cc -> getLabel 0 >>= \l -> showOp ("j" ++ show cc) $ (case s of Just S8 -> "short "; Just S32 -> "near "; _ -> "") ++ l
-    Jmp_    -> getLabel 0 >>= \l -> showOp "jmp" l
+    Jmp_ s  -> getLabel 0 >>= \l -> showOp "jmp" $ (case s of Just S8 -> "short "; Just S32 -> "near "; _ -> "") ++ l
     Label_  -> getLabel 0 >>= codeLine
 

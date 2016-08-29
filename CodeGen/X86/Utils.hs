@@ -26,8 +26,20 @@ a <:> b = Scope $ a <.> b
 
 infixr 5 <:>, <.>
 
+-- | auto size backward jump
+jmp_back = Jmp Nothing
+
+-- | auto size jump; the extra argument is the code between the jump and the label
+jmp x = if snd (bounds $ mkCodeBuilder x) <= 127 then jmp8 else jmp32
+
+-- | short jump
+jmp8 = Jmp $ Just S8
+
+-- | near jump
+jmp32 = Jmp $ Just S32
+
 -- | auto size conditional forward jump
-j c x = if snd (bounds $ mkCodeBuilder $ Up x) <= 127 then j8 c x else j32 c x
+j c x = if snd (bounds $ mkCodeBuilder x) <= 127 then j8 c x else j32 c x
 
 -- | short conditional forward jump
 j8 c x = J (Just S8) c <> Up x <:> mempty
@@ -44,12 +56,14 @@ x `j_back8` c = mempty <:> Up x <> J (Just S8) c
 -- | near conditional backward jump
 x `j_back32` c = mempty <:> Up x <> J (Just S32) c
 
-if_ c a b = (J (Just S8) c <> Up (Up a <> Jmp) <:> mempty) <> Up b <:> mempty
+if_ c a b = (J (Just S8) c <> Up (Up a <> jmp b) <:> mempty) <> Up b <:> mempty
 
 lea8 :: IsSize s => Operand RW s -> Operand RW S8 -> Code
 lea8 = Lea
 
-leaData r d = (lea8 r ipBase <> Up Jmp <:> mempty) <> Data (toBytes d) <:> mempty
+leaData r d = (lea8 r ipBase <> Up (jmp db) <:> mempty) <> db <:> mempty
+  where
+    db = Data (toBytes d)
 
 ------------------------------------------------------------------------------ 
 
