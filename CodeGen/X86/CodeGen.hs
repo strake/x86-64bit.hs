@@ -85,19 +85,21 @@ no64 s = s
 
 data CodeBuilder
     = CodeBuilder !Int !Int (CodeBuilderState -> (CodeBuilderRes, CodeBuilderState))
-    | ExactCodeBuilder !Int (CodeBuilderState -> (CodeBuilderRes, LabelState))   -- ^ CodeBuilder with known length
+
+pattern ExactCodeBuilder len f <- (getExactCodeBuilder -> Just (len, f))
+  where ExactCodeBuilder len f = CodeBuilder len len $ \st@(n, _) -> second ((,) (n + len)) $ f st
+
+getExactCodeBuilder (CodeBuilder i j f) | i == j = Just (i, second snd . f)
+getExactCodeBuilder _ = Nothing
 
 codeBuilderLength (ExactCodeBuilder len _) = len
 
 buildCode :: CodeBuilder -> CodeBuilderState -> (CodeBuilderRes, CodeBuilderState)
 buildCode (CodeBuilder _ _ f) st = f st
-buildCode (ExactCodeBuilder len f) (n, st) = second ((,) (n + len)) $ f (n, st)
 
 mapLabelState g (CodeBuilder i j f) = CodeBuilder i j $ \(n, g -> (fx, xs)) -> second (second fx) $ f (n, xs)
-mapLabelState g (ExactCodeBuilder len f) = ExactCodeBuilder len $ \(n, g -> (fx, xs)) -> second fx $ f (n, xs)
 
 censorCodeBuilder g (CodeBuilder i j f) = CodeBuilder i j $ \st -> first (g st) $ f st
-censorCodeBuilder g (ExactCodeBuilder len f) = ExactCodeBuilder len $ \st -> first (g st) $ f st
 
 type CodeBuilderRes = [Either Int (Int, Word8)]
 
@@ -107,16 +109,11 @@ type LabelState = [Either [(Size, Int, Int)] Int]
 
 instance Monoid CodeBuilder where
     mempty = ExactCodeBuilder 0 $ \(_, st) -> (mempty, st)
-    ExactCodeBuilder len f `mappend` ExactCodeBuilder len' g = ExactCodeBuilder (len + len') $ \st -> let
-            (a, st') = f st
-            (b, st'') = g (len + fst st, st')
-        in (a ++ b, st'')
     f `mappend` g = CodeBuilder (i1+i2) (j1+j2) $ \(buildCode f -> (a, buildCode g -> (b, st))) -> (a ++ b, st)
       where
         (i1, j1) = bounds f
         (i2, j2) = bounds g
 
-bounds (ExactCodeBuilder i _) = (i, i)
 bounds (CodeBuilder i j _) = (i, j)
 
 codeByte :: Word8 -> CodeBuilder
