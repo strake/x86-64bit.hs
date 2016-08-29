@@ -288,6 +288,7 @@ mkCodeBuilder' = \case
             g (size, p, v) = zip [p..] $ getBytes $ case (size, v + n) of
                 (S8, Integral v) -> toBytes (v :: Int8)
                 (S32, Integral v) -> toBytes (v :: Int32)
+                (s, i) -> error $ show i ++ " doesn't fit into " ++ show s
 
             replL x (Left z: zs) = (z, x: zs)
             replL x (z: zs) = second (z:) $ replL x zs
