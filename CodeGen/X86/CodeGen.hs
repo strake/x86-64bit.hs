@@ -250,6 +250,26 @@ mkCodeBuilder' = \case
     Call_ a -> op1' 0xff 0x2 a
     Jmpq_ a -> op1' 0xff 0x4 a
 
+    Movdqa_ a@OpXMM b -> sse 0x6f a b
+    Movdqa_ b a@OpXMM -> sse 0x7f a b
+    Paddb_  a b -> sse 0xfc a b
+    Paddw_  a b -> sse 0xfd a b
+    Paddd_  a b -> sse 0xfe a b
+    Paddq_  a b -> sse 0xd4 a b
+    Psubb_  a b -> sse 0xf8 a b
+    Psubw_  a b -> sse 0xf9 a b
+    Psubd_  a b -> sse 0xfa a b
+    Psubq_  a b -> sse 0xfb a b
+    Pxor_   a b -> sse 0xef a b
+    Psllw_  a b -> sseShift 0x71 0x2 0xd1 a b
+    Pslld_  a b -> sseShift 0x72 0x2 0xd2 a b
+    Psllq_  a b -> sseShift 0x73 0x2 0xd3 a b
+    Psrlw_  a b -> sseShift 0x71 0x6 0xf1 a b
+    Psrld_  a b -> sseShift 0x72 0x6 0xf2 a b
+    Psrlq_  a b -> sseShift 0x73 0x6 0xf3 a b
+    Psraw_  a b -> sseShift 0x71 0x4 0xe1 a b
+    Psrad_  a b -> sseShift 0x72 0x4 0xe2 a b
+
     Pop_ dest@(RegOp r) -> regprefix S32 dest (oneReg 0x0b r) mempty
     Pop_ dest -> regprefix S32 dest (codeByte 0x8f <> reg8 0x0 dest) mempty
 
@@ -321,10 +341,11 @@ mkCodeBuilder' = \case
         | otherwise = error "cannot use high register in rex instruction"
       where
         pre = case s of
-            S8  -> mem32pre r <> iff (any isRex rs || x /= 0) (prefix40_ x)
+            S8  -> mem32pre r <> maybePrefix40
             S16 -> codeByte 0x66 <> mem32pre r <> prefix40 x
             S32 -> mem32pre r <> prefix40 x
             S64 -> mem32pre r <> prefix40 (0x8 .|. x)
+            S128 -> mem32pre r <> codeByte 0x66 <> maybePrefix40
 
         mem32pre :: Operand r s -> CodeBuilder
         mem32pre (MemOp r@Addr{}) | size r == S32 = codeByte 0x67
@@ -333,8 +354,9 @@ mkCodeBuilder' = \case
         prefix40 x = iff (x /= 0) $ prefix40_ x
         prefix40_ x = codeByte $ 0x40 .|. x
 
+        maybePrefix40 = iff (any isRex rs || x /= 0) (prefix40_ x)
+
         displacement :: Operand r s -> CodeBuilder
-        displacement RegOp{} = mempty
         displacement (IPMemOp (Immediate d)) = toCode d
         displacement (IPMemOp (LabelRelValue s@S32 d)) = mkRef s (sizeLen s + fromIntegral (codeBuilderLength im)) d
         displacement (MemOp (Addr b d i)) = mkSIB b i <> dispVal b d
@@ -352,10 +374,12 @@ mkCodeBuilder' = \case
             dispVal Nothing _ = toCode (0 :: Int32)      -- [rbp] --> [rbp + 0]
             dispVal (Just (reg8_ -> 0x5)) _ = codeByte 0      -- [rbp] --> [rbp + 0]
             dispVal _ _ = mempty
+        displacement _ = mempty
 
     reg8_ :: Reg t -> Word8
     reg8_ (NormalReg r) = r .&. 0x7
     reg8_ (HighReg r) = r .|. 0x4
+    reg8_ (XMM r) = r .&. 0x7
 
     regprefix :: IsSize s => Size -> Operand r s -> CodeBuilder -> CodeBuilder -> CodeBuilder
     regprefix s r c im = sizePrefix_ (regs r) s r (extbits r) c im
@@ -369,6 +393,13 @@ mkCodeBuilder' = \case
     regprefix2' :: (IsSize s1, IsSize s) => Operand r1 s1 -> Operand r s -> Word8 -> CodeBuilder -> CodeBuilder
     regprefix2' r r' p c = regprefix2 r r' $ extension r p <> c
 
+    sse :: Word8 -> Operand r S128 -> Operand r' S128 -> CodeBuilder
+    sse op a@OpXMM b = regprefix S128 b (codeByte 0x0f <> codeByte op <> reg2x8 a b) mempty
+
+    sseShift :: Word8 -> Word8 -> Word8 -> Operand RW S128 -> Operand r S8 -> CodeBuilder
+    sseShift op x op' a@OpXMM b@(mkImm S8 -> FJust (_, i)) = regprefix S128 b (codeByte 0x0f <> codeByte op <> reg8 x a) i
+    -- TODO: xmm argument
+
     extension :: HasSize a => a -> Word8 -> CodeBuilder
     extension x p = codeByte $ p `shiftL` 1 .|. indicator (size x /= S8)
 
@@ -376,7 +407,7 @@ mkCodeBuilder' = \case
     extbits = \case
         MemOp (Addr b _ i) -> maybe 0 indexReg b .|. maybe 0 ((`shiftL` 1) . indexReg . snd) i
         RegOp r -> indexReg r
-        IPMemOp{} -> 0
+        _ -> 0
       where
         indexReg (NormalReg r) = r `shiftR` 3 .&. 1
         indexReg _ = 0
@@ -391,7 +422,7 @@ mkCodeBuilder' = \case
         operMode (MemOp (Addr _ (Disp (Integral (_ :: Int8))) _))  = 0x1
         operMode (MemOp (Addr _ Disp{} _))  = 0x2
         operMode IPMemOp{}                  = 0x0
-        operMode RegOp{}                    = 0x3
+        operMode _                          = 0x3
 
         rc :: Operand r s -> Word8
         rc (MemOp (Addr (Just r) _ NoIndex)) = reg8_ r
@@ -419,6 +450,7 @@ mkCodeBuilder' = \case
     op2g :: (IsSize t, IsSize s) => Word8 -> Operand r s -> Operand r' t -> CodeBuilder
     op2g op dest src = regprefix2' dest src op $ reg2x8 src dest
 
+    reg2x8 :: (IsSize s, IsSize s') => Operand r s -> Operand r' s' -> CodeBuilder
     reg2x8 (RegOp r) x = reg8 (reg8_ r) x
 
     op1_ :: IsSize s => Word8 -> Word8 -> Operand r s -> CodeBuilder -> CodeBuilder
@@ -439,6 +471,7 @@ mkCodeBuilder' = \case
     oneReg :: Word8 -> Reg t -> CodeBuilder
     oneReg x r = codeByte $ x `shiftL` 3 .|. reg8_ r
 
+pattern OpXMM <- RegOp XMM{}
 
 -------------------------------------------------------------- asm codes
 
@@ -490,6 +523,24 @@ pattern Shl a b = CodeLine (Shl_ a b)
 pattern Shr a b = CodeLine (Shr_ a b)
 pattern Sar a b = CodeLine (Sar_ a b)
 pattern Xchg a b = CodeLine (Xchg_ a b)
+pattern Movdqa a b = CodeLine (Movdqa_ a b)
+pattern Paddb  a b = CodeLine (Paddb_  a b)
+pattern Paddw  a b = CodeLine (Paddw_  a b)
+pattern Paddd  a b = CodeLine (Paddd_  a b)
+pattern Paddq  a b = CodeLine (Paddq_  a b)
+pattern Psubb  a b = CodeLine (Psubb_  a b)
+pattern Psubw  a b = CodeLine (Psubw_  a b)
+pattern Psubd  a b = CodeLine (Psubd_  a b)
+pattern Psubq  a b = CodeLine (Psubq_  a b)
+pattern Pxor   a b = CodeLine (Pxor_   a b)
+pattern Psllw  a b = CodeLine (Psllw_  a b)
+pattern Pslld  a b = CodeLine (Pslld_  a b)
+pattern Psllq  a b = CodeLine (Psllq_  a b)
+pattern Psrlw  a b = CodeLine (Psrlw_  a b)
+pattern Psrld  a b = CodeLine (Psrld_  a b)
+pattern Psrlq  a b = CodeLine (Psrlq_  a b)
+pattern Psraw  a b = CodeLine (Psraw_  a b)
+pattern Psrad  a b = CodeLine (Psrad_  a b)
 pattern Lea a b = CodeLine (Lea_ a b)
 pattern J a b = CodeLine (J_ a b)
 pattern Pop a = CodeLine (Pop_ a)

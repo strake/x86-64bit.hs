@@ -14,6 +14,7 @@
 {-# language FlexibleContexts #-}
 {-# language FlexibleInstances #-}
 {-# language GeneralizedNewtypeDeriving #-}
+{-# language StandaloneDeriving #-}
 module CodeGen.X86.Asm where
 
 import Numeric
@@ -71,26 +72,29 @@ instance HasBytes Int64 where toBytes w = toBytes (fromIntegral w :: Word64)
 
 ------------------------------------------------------- sizes
 
-data Size = S8 | S16 | S32 | S64
+data Size = S8 | S16 | S32 | S64 | S128
     deriving (Eq, Ord)
 
 instance Show Size where
     show = \case
-        S8  -> "byte"
-        S16 -> "word"
-        S32 -> "dword"
-        S64 -> "qword"
+        S8   -> "byte"
+        S16  -> "word"
+        S32  -> "dword"
+        S64  -> "qword"
+        S128 -> "oword"
 
-mkSize 1 = S8
-mkSize 2 = S16
-mkSize 4 = S32
-mkSize 8 = S64
+mkSize  1 = S8
+mkSize  2 = S16
+mkSize  4 = S32
+mkSize  8 = S64
+mkSize 16 = S128
 
 sizeLen = \case
-    S8  -> 1
-    S16 -> 2
-    S32 -> 4
-    S64 -> 8
+    S8   ->  1
+    S16  ->  2
+    S32  ->  4
+    S64  ->  8
+    S128 -> 16
 
 class HasSize a where size :: a -> Size
 
@@ -105,25 +109,28 @@ instance HasSize Int64  where size _ = S64
 
 -- | Singleton type for size
 data SSize (s :: Size) where
-    SSize8  :: SSize S8
-    SSize16 :: SSize S16
-    SSize32 :: SSize S32
-    SSize64 :: SSize S64
+    SSize8   :: SSize S8
+    SSize16  :: SSize S16
+    SSize32  :: SSize S32
+    SSize64  :: SSize S64
+    SSize128 :: SSize S128
 
 instance HasSize (SSize s) where
     size = \case
-        SSize8  -> S8
-        SSize16 -> S16
-        SSize32 -> S32
-        SSize64 -> S64
+        SSize8   -> S8
+        SSize16  -> S16
+        SSize32  -> S32
+        SSize64  -> S64
+        SSize128 -> S128
 
 class IsSize (s :: Size) where
     ssize :: SSize s
 
-instance IsSize S8  where ssize = SSize8
-instance IsSize S16 where ssize = SSize16
-instance IsSize S32 where ssize = SSize32
-instance IsSize S64 where ssize = SSize64
+instance IsSize S8   where ssize = SSize8
+instance IsSize S16  where ssize = SSize16
+instance IsSize S32  where ssize = SSize32
+instance IsSize S64  where ssize = SSize64
+instance IsSize S128 where ssize = SSize128
 
 data EqT s s' where
     Refl :: EqT s s
@@ -196,6 +203,10 @@ data Access
 data Reg :: Size -> * where
     NormalReg :: Word8 -> Reg s
     HighReg   :: Word8 -> Reg S8
+    XMM       :: Word8 -> Reg S128
+
+deriving instance Eq (Reg s)
+deriving instance Ord (Reg s)
 
 data Addr s = Addr
     { baseReg        :: BaseReg s
@@ -215,25 +226,15 @@ pattern IndexReg a b = Just (a, b)
 
 ipBase = IPMemOp $ LabelRelValue S32 0
 
-instance Eq (Reg s) where
-    NormalReg a == NormalReg b = a == b
-    HighReg a == HighReg b = a == b
-    _ == _ = False
-
-instance Ord (Reg s) where
-    NormalReg a `compare` NormalReg b = a `compare` b
-    HighReg a   `compare` HighReg b   = a `compare` b
-    NormalReg{} `compare` HighReg{}   = LT
-    HighReg{}   `compare` NormalReg{} = GT
-
 instance IsSize s => Show (Reg s) where
     show = \case
+        XMM i -> "xmm" ++ show i
         HighReg i -> (["ah"," ch", "dh", "bh"] ++ repeat err) !! fromIntegral i
         r@(NormalReg i) -> (!! fromIntegral i) . (++ repeat err) $ case size r of
-            S8  -> ["al", "cl", "dl", "bl", "spl", "bpl", "sil", "dil"] ++ map (++ "b") r8
-            S16 -> r0 ++ map (++ "w") r8
-            S32 -> map ('e':) r0 ++ map (++ "d") r8
-            S64 -> map ('r':) r0 ++ r8
+            S8   -> ["al", "cl", "dl", "bl", "spl", "bpl", "sil", "dil"] ++ map (++ "b") r8
+            S16  -> r0 ++ map (++ "w") r8
+            S32  -> map ('e':) r0 ++ map (++ "d") r8
+            S64  -> map ('r':) r0 ++ r8
           where
             r0 = ["ax", "cx", "dx", "bx", "sp", "bp", "si", "di"]
             r8 = ["r8", "r9", "r10", "r11", "r12", "r13", "r14", "r15"]
@@ -446,6 +447,16 @@ ch   = fromReg $ HighReg 0x1
 dh   = fromReg $ HighReg 0x2
 bh   = fromReg $ HighReg 0x3
 
+xmm0, xmm1, xmm2, xmm3, xmm4, xmm5, xmm6, xmm7 :: FromReg c => c S128
+xmm0 = fromReg $ XMM 0x0
+xmm1 = fromReg $ XMM 0x1
+xmm2 = fromReg $ XMM 0x2
+xmm3 = fromReg $ XMM 0x3
+xmm4 = fromReg $ XMM 0x4
+xmm5 = fromReg $ XMM 0x5
+xmm6 = fromReg $ XMM 0x6
+xmm7 = fromReg $ XMM 0x7
+
 pattern RegA = RegOp (NormalReg 0x0)
 
 pattern RegCl :: Operand r S8
@@ -524,6 +535,9 @@ data CodeLine where
     Add_, Or_, Adc_, Sbb_, And_, Sub_, Xor_, Cmp_, Test_, Mov_  :: IsSize s => Operand RW s -> Operand r s -> CodeLine
     Rol_, Ror_, Rcl_, Rcr_, Shl_, Shr_, Sar_                 :: IsSize s => Operand RW s -> Operand r S8 -> CodeLine
 
+    Movdqa_, Paddb_, Paddw_, Paddd_, Paddq_, Psubb_, Psubw_, Psubd_, Psubq_, Pxor_ :: Operand RW S128 -> Operand r S128 -> CodeLine
+    Psllw_, Pslld_, Psllq_, Psrlw_, Psrld_, Psrlq_, Psraw_, Psrad_ :: Operand RW S128 -> Operand r S8 -> CodeLine
+
     Cmov_ :: IsSize s => Condition -> Operand RW s -> Operand RW s -> CodeLine
     Xchg_ :: IsSize s => Operand RW s -> Operand RW s -> CodeLine
     Lea_  :: (IsSize s, IsSize s') => Operand RW s -> Operand RW s' -> CodeLine
@@ -580,6 +594,24 @@ showCodeLine = \case
     Cmov_ cc op1 op2 -> showOp2 ("cmov" ++ show cc) op1 op2
     Lea_  op1 op2 -> showOp2 "lea"  op1 op2
     Xchg_ op1 op2 -> showOp2 "xchg" op1 op2
+    Movdqa_ op1 op2 -> showOp2 "movdqa" op1 op2
+    Paddb_  op1 op2 -> showOp2 "paddb"  op1 op2
+    Paddw_  op1 op2 -> showOp2 "paddw"  op1 op2
+    Paddd_  op1 op2 -> showOp2 "paddd"  op1 op2
+    Paddq_  op1 op2 -> showOp2 "paddq"  op1 op2
+    Psubb_  op1 op2 -> showOp2 "psubb"  op1 op2
+    Psubw_  op1 op2 -> showOp2 "psubw"  op1 op2
+    Psubd_  op1 op2 -> showOp2 "psubd"  op1 op2
+    Psubq_  op1 op2 -> showOp2 "psubq"  op1 op2
+    Pxor_   op1 op2 -> showOp2 "pxor"   op1 op2
+    Psllw_  op1 op2 -> showOp2 "psllw"  op1 op2
+    Pslld_  op1 op2 -> showOp2 "pslld"  op1 op2
+    Psllq_  op1 op2 -> showOp2 "psllq"  op1 op2
+    Psrlw_  op1 op2 -> showOp2 "psrlw"  op1 op2
+    Psrld_  op1 op2 -> showOp2 "psrld"  op1 op2
+    Psrlq_  op1 op2 -> showOp2 "psrlq"  op1 op2
+    Psraw_  op1 op2 -> showOp2 "psraw"  op1 op2
+    Psrad_  op1 op2 -> showOp2 "psrad"  op1 op2
     Inc_  op -> showOp1 "inc"  op
     Dec_  op -> showOp1 "dec"  op
     Not_  op -> showOp1 "not"  op

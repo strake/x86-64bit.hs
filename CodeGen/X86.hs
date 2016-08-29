@@ -36,6 +36,8 @@ module CodeGen.X86
     , al, cl, dl, bl, spl, bpl, sil, dil, r8b, r9b, r10b, r11b, r12b, r13b, r14b, r15b
     -- *** 8 bit high registers
     , ah, ch, dh, bh
+    -- *** SSE registers
+    , xmm0, xmm1, xmm2, xmm3, xmm4, xmm5, xmm6, xmm7
     -- * Conditions
     , Condition
     , pattern O
@@ -90,6 +92,24 @@ module CodeGen.X86
     , pattern Shr
     , pattern Sar
     , pattern Xchg
+    , pattern Movdqa
+    , pattern Paddb
+    , pattern Paddw
+    , pattern Paddd
+    , pattern Paddq
+    , pattern Psubb
+    , pattern Psubw
+    , pattern Psubd
+    , pattern Psubq
+    , pattern Pxor
+    , pattern Psllw
+    , pattern Pslld
+    , pattern Psllq
+    , pattern Psrlw
+    , pattern Psrld
+    , pattern Psrlq
+    , pattern Psraw
+    , pattern Psrad
     , pattern Lea
     , pattern J
     , pattern Pop
