@@ -20,6 +20,10 @@ module CodeGen.X86
     , imm
     -- ** Memory references
     , addr
+    , addr8
+    , addr16
+    , addr32
+    , addr64
     , ipBase
     -- ** Registers
     -- *** 64 bit registers
@@ -95,10 +99,12 @@ module CodeGen.X86
     , pattern Data
     , pattern Align
     , pattern Label
+    , pattern Scope
+    , pattern Up
     -- * Compound assembly codes
     , (<>)
     , (<.>), (<:>)
-    , j, j_back, if_
+    , j, j8, j32, j_back, j_back8, j_back32, if_
     , lea8
     , leaData
     -- * Compilation

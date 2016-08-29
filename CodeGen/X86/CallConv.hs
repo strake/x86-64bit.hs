@@ -19,10 +19,10 @@ import CodeGen.X86.CodeGen
 -- On Win64 the caller have to reserve 32 byte "shadow space" on the stack (and clean up after)
 callFun :: Operand S64 RW -> FunPtr a -> Code
 callFun r p 
-  =  Sub rsp (imm 32) 
-  <> Mov r (imm $ fromIntegral $ ptrToIntPtr $ castFunPtrToPtr p) 
+  =  Sub rsp 32
+  <> Mov r (imm $ ptrToIntPtr $ castFunPtrToPtr p)
   <> Call r 
-  <> Add rsp (imm 32)
+  <> Add rsp 32
 
 #elif defined (darwin_HOST_OS)
 
@@ -30,11 +30,11 @@ callFun r p
 callFun :: Operand S64 RW -> FunPtr a -> Code
 callFun r p 
   =  Push r15              -- we will use r15 (non-volatile) to store old rsp
-  <> Mov r15 (imm 15)      -- 0xf
+  <> Mov r15 15            -- 0xf
   <> Not r15               -- 0xffff ... fff0
   <> And r15 rsp           -- align rsp into r15
   <> Xchg r15 rsp          -- new rsp = aligned, r15 = old rsp
-  <> Mov r (imm $ fromIntegral $ ptrToIntPtr $ castFunPtrToPtr p) 
+  <> Mov r (imm $ ptrToIntPtr $ castFunPtrToPtr p)
   <> Call r 
   <> Mov rsp r15           -- restore rsp
   <> Pop r15               -- restore r15
@@ -44,7 +44,7 @@ callFun r p
 -- helper to call a function
 callFun :: Operand S64 RW -> FunPtr a -> Code
 callFun r p 
-  =  Mov r (imm $ fromIntegral $ ptrToIntPtr $ castFunPtrToPtr p) 
+  =  Mov r (imm $ ptrToIntPtr $ castFunPtrToPtr p)
   <> Call r
 
 #endif

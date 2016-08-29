@@ -45,8 +45,6 @@ indicator True  = 0x1
 pattern FJust a = First (Just a)
 pattern FNothing = First Nothing
 
-pattern Integral xs <- (toIntegralSized -> Just xs)
-
 integralToBytes :: (Bits a, Integral a) => Bool{-signed-} -> Size -> a -> Maybe Bytes
 integralToBytes False S64 w = toBytes <$> (toIntegralSized w :: Maybe Word64)
 integralToBytes False S32 w = toBytes <$> (toIntegralSized w :: Maybe Word32)

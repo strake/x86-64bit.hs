@@ -190,7 +190,7 @@ instance Arbitrary Code where
             ]
           where
             arb = oneof
-                [ imm . fromIntegral <$> (arbitrary :: Gen Word8)
+                [ imm <$> (arbitrary :: Gen Word8)
                 , return cl
                 ]
 

@@ -24,7 +24,7 @@ fibCode = saveNonVolatile
     $  Mov rdi arg1
     <> Inc rdi
     <> Xor rdx rdx
-    <> Mov rax (imm 1)
+    <> Mov rax 1
     <> (Mov rcx rax <> Mov rax rdx <> Add rdx rcx <> Dec rdi) `j_back` NZ
 
 fibFun :: Word64 -> Word64
@@ -35,7 +35,7 @@ tracedFibCode = saveNonVolatile
     $  Mov rdi arg1
     <> Inc rdi
     <> Xor rdx rdx
-    <> Mov rax (imm 1)
+    <> Mov rax 1
     <> (Mov rcx rax <> Mov rax rdx <> Add rdx rcx <> traceReg "d" rax {- <> traceReg "d" rdi -} <> Dec rdi) `j_back` NZ
 
 tracedFibFun :: Word64 -> Word64

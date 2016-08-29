@@ -41,6 +41,8 @@ showByte b = [showNibble 1 b, showNibble 0 b]
 
 showHex' x = "0x" ++ showHex x ""
 
+pattern Integral xs <- (toIntegralSized -> Just xs)
+
 ------------------------------------------------------- byte sequences
 
 newtype Bytes = Bytes {getBytes :: [Word8]}
@@ -161,6 +163,18 @@ data Operand :: Size -> Access -> * where
 
 addr = MemOp
 
+addr8 :: IsSize s => Addr s -> Operand S8 rw
+addr8 = addr
+
+addr16 :: IsSize s => Addr s -> Operand S16 rw
+addr16 = addr
+
+addr32 :: IsSize s => Addr s -> Operand S32 rw
+addr32 = addr
+
+addr64 :: IsSize s => Addr s -> Operand S64 rw
+addr64 = addr
+
 data Immediate a
     = Immediate a
     | LabelRelValue Size{-size hint-} !LabelIndex
@@ -262,8 +276,12 @@ instance IsSize s => HasSize (Reg s) where
 instance IsSize s => HasSize (IndexReg s) where
     size _ = size (ssize :: SSize s)
 
-imm :: Integral a => a -> Operand s R
-imm = ImmOp . Immediate . fromIntegral
+imm :: (Integral a, Bits a) => a -> Operand s R
+imm (Integral x) = ImmOp $ Immediate x
+
+instance (r ~ R) => Num (Operand s r) where
+    negate (ImmOp (Immediate x)) = imm (negate x)
+    fromInteger = imm
 
 instance Monoid (Addr s) where
     mempty = Addr (getFirst mempty) (getFirst mempty) (getFirst mempty)
@@ -285,8 +303,12 @@ index2 = index s2
 index4 = index s4
 index8 = index s8
 
-disp :: Int32 -> Addr s
-disp x = Addr Nothing (Disp x) NoIndex
+disp :: (Bits a, Integral a) => a -> Addr s
+disp (Integral x) = Addr Nothing (Disp x) NoIndex
+
+instance Num (Addr s) where
+    fromInteger = disp
+    (+) = (<>)
 
 reg = RegOp . NormalReg
 
