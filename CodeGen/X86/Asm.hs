@@ -147,6 +147,12 @@ s2 = Scale 0x1
 s4 = Scale 0x2
 s8 = Scale 0x3
 
+toScale = \case
+    1 -> s1
+    2 -> s2
+    4 -> s4
+    8 -> s8
+
 scaleFactor (Scale i) = case i of
     0x0 -> 1
     0x1 -> 2
@@ -161,18 +167,19 @@ data Operand :: Access -> Size -> * where
     MemOp     :: IsSize s' => Addr s' -> Operand rw s
     IPMemOp   :: Immediate Int32 -> Operand rw s
 
-addr = MemOp
+addr :: IsSize s => Address s -> Operand rw s'
+addr = MemOp . makeAddr
 
-addr8 :: IsSize s => Addr s -> Operand rw S8
+addr8 :: IsSize s => Address s -> Operand rw S8
 addr8 = addr
 
-addr16 :: IsSize s => Addr s -> Operand rw S16
+addr16 :: IsSize s => Address s -> Operand rw S16
 addr16 = addr
 
-addr32 :: IsSize s => Addr s -> Operand rw S32
+addr32 :: IsSize s => Address s -> Operand rw S32
 addr32 = addr
 
-addr64 :: IsSize s => Addr s -> Operand rw S64
+addr64 :: IsSize s => Address s -> Operand rw S64
 addr64 = addr
 
 data Immediate a
@@ -212,6 +219,12 @@ instance Eq (Reg s) where
     NormalReg a == NormalReg b = a == b
     HighReg a == HighReg b = a == b
     _ == _ = False
+
+instance Ord (Reg s) where
+    NormalReg a `compare` NormalReg b = a `compare` b
+    HighReg a   `compare` HighReg b   = a `compare` b
+    NormalReg{} `compare` HighReg{}   = LT
+    HighReg{}   `compare` NormalReg{} = GT
 
 instance IsSize s => Show (Reg s) where
     show = \case
@@ -267,6 +280,9 @@ instance IsSize s => HasSize (Operand a s) where
 instance IsSize s => HasSize (Addr s) where
     size _ = size (ssize :: SSize s)
 
+instance IsSize s => HasSize (Address s) where
+    size _ = size (ssize :: SSize s)
+
 instance IsSize s => HasSize (BaseReg s) where
     size _ = size (ssize :: SSize s)
 
@@ -298,17 +314,45 @@ base x = Addr (Just x) NoDisp NoIndex
 index :: Scale -> Reg s -> Addr s
 index sc x = Addr Nothing NoDisp (IndexReg sc x)
 
+index' :: Int -> Reg s -> Addr s
+index' sc x = Addr Nothing NoDisp (IndexReg (toScale sc) x)
+
 index1 = index s1
 index2 = index s2
 index4 = index s4
 index8 = index s8
 
 disp :: (Bits a, Integral a) => a -> Addr s
-disp (Integral x) = Addr Nothing (Disp x) NoIndex
+disp (Integral x)
+    | x == 0 = mempty
+    | otherwise = Addr Nothing (Disp x) NoIndex
 
-instance Num (Addr s) where
-    fromInteger = disp
-    (+) = (<>)
+data Address :: Size -> * where
+    Address :: [(Int, Reg s)] -> Int -> Address s
+
+scaleAddress :: (Int -> Int) -> Address s -> Address s
+scaleAddress f (Address rs d) = Address (first f <$> rs) $ f d
+
+instance Num (Address s) where
+    fromInteger d = Address [] $ fromInteger d
+    negate = scaleAddress negate
+    Address [] t * a = scaleAddress (t*) a
+    a * Address [] t = scaleAddress (t*) a
+    Address rs d + Address rs' d' = Address (f rs rs') (d + d') where
+        f [] rs = rs
+        f rs [] = rs
+        f (p@(t, r): rs) (p'@(t', r'): rs') = case compare r r' of
+            LT -> p: f rs (p': rs')
+            GT -> p': f (p: rs) rs'
+            EQ | t + t' == 0 -> f rs rs'
+               | otherwise   -> (t + t', r): f rs rs'
+
+makeAddr :: Address s -> Addr s
+makeAddr (Address [(1, r)] d) = base r <> disp d
+makeAddr (Address [(t, r)] d) = index' t r <> disp d
+makeAddr (Address [(1, r), (1, r'@(NormalReg 0x4))] d) = base r' <> index1 r <> disp d
+makeAddr (Address [(1, r), (t, r')] d) = base r <> index' t r' <> disp d
+makeAddr (Address [(t, r'), (1, r)] d) = base r <> index' t r' <> disp d
 
 class FromReg c where
     fromReg :: Reg s -> c s
@@ -319,8 +363,8 @@ instance FromReg Reg where
 instance FromReg (Operand r) where
     fromReg = RegOp
 
-instance FromReg Addr where
-    fromReg = base
+instance FromReg Address where
+    fromReg r = Address [(1, r)] 0
 
 reg = fromReg . NormalReg
 
