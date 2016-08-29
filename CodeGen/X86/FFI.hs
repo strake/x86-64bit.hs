@@ -37,10 +37,19 @@ foreign import ccall "dynamic" callWord64           :: FunPtr Word64            
 foreign import ccall "dynamic" callWord32           :: FunPtr Word32                -> Word32
 foreign import ccall "dynamic" callWord16           :: FunPtr Word16                -> Word16
 foreign import ccall "dynamic" callWord8            :: FunPtr Word8                 -> Word8
+foreign import ccall "dynamic" callWord             :: FunPtr Word                  -> Word
+foreign import ccall "dynamic" callInt64            :: FunPtr Int64                 -> Int64
+foreign import ccall "dynamic" callInt32            :: FunPtr Int32                 -> Int32
+foreign import ccall "dynamic" callInt16            :: FunPtr Int16                 -> Int16
+foreign import ccall "dynamic" callInt8             :: FunPtr Int8                  -> Int8
+foreign import ccall "dynamic" callInt              :: FunPtr Int                   -> Int
 foreign import ccall "dynamic" callBool             :: FunPtr Bool                  -> Bool
 foreign import ccall "dynamic" callIOUnit           :: FunPtr (IO ())               -> IO ()
 foreign import ccall "dynamic" callWord64_Word64    :: FunPtr (Word64 -> Word64)    -> Word64 -> Word64
 foreign import ccall "dynamic" callPtr_Word64       :: FunPtr (Ptr a -> Word64)     -> Ptr a -> Word64
+foreign import ccall "dynamic" callPtr_Word         :: FunPtr (Ptr a -> Word)       -> Ptr a -> Word
+foreign import ccall "dynamic" callPtr_Int64        :: FunPtr (Ptr a -> Int64)      -> Ptr a -> Int64
+foreign import ccall "dynamic" callPtr_Int          :: FunPtr (Ptr a -> Int)        -> Ptr a -> Int
 
 unsafeCallForeignPtr0 call p = unsafePerformIO $ evaluate (call (castPtrToFunPtr $ unsafeForeignPtrToPtr p)) <* touchForeignPtr p
 
@@ -55,10 +64,19 @@ instance Callable Word64                where unsafeCallForeignPtr = unsafeCallF
 instance Callable Word32                where unsafeCallForeignPtr = unsafeCallForeignPtr0 callWord32
 instance Callable Word16                where unsafeCallForeignPtr = unsafeCallForeignPtr0 callWord16
 instance Callable Word8                 where unsafeCallForeignPtr = unsafeCallForeignPtr0 callWord8
+instance Callable Word                  where unsafeCallForeignPtr = unsafeCallForeignPtr0 callWord
+instance Callable Int64                 where unsafeCallForeignPtr = unsafeCallForeignPtr0 callInt64
+instance Callable Int32                 where unsafeCallForeignPtr = unsafeCallForeignPtr0 callInt32
+instance Callable Int16                 where unsafeCallForeignPtr = unsafeCallForeignPtr0 callInt16
+instance Callable Int8                  where unsafeCallForeignPtr = unsafeCallForeignPtr0 callInt8
+instance Callable Int                   where unsafeCallForeignPtr = unsafeCallForeignPtr0 callInt
 instance Callable Bool                  where unsafeCallForeignPtr = unsafeCallForeignPtr0 callBool
 instance Callable (IO ())               where unsafeCallForeignPtr = unsafeCallForeignPtrIO0 callIOUnit
 instance Callable (Word64 -> Word64)    where unsafeCallForeignPtr = unsafeCallForeignPtr1 callWord64_Word64
 instance Callable (Ptr a -> Word64)     where unsafeCallForeignPtr = unsafeCallForeignPtr1 callPtr_Word64
+instance Callable (Ptr a -> Word)       where unsafeCallForeignPtr = unsafeCallForeignPtr1 callPtr_Word
+instance Callable (Ptr a -> Int64)      where unsafeCallForeignPtr = unsafeCallForeignPtr1 callPtr_Int64
+instance Callable (Ptr a -> Int)        where unsafeCallForeignPtr = unsafeCallForeignPtr1 callPtr_Int
 
 -------------------------------------------------------
 
