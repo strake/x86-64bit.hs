@@ -8,16 +8,10 @@ module CodeGen.X86
     , Size (..)
     , HasSize (..)
     , IsSize
-    -- * Addresses
-    , base
-    , disp
-    , index1, index2, index4, index8
     -- * Operands
     , Access (..)
     , Operand
     , resizeOperand
-    -- ** Immediate values
-    , imm
     -- ** Memory references
     , addr
     , addr8
