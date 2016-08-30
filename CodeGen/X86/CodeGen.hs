@@ -250,6 +250,9 @@ mkCodeBuilder' = \case
     Call_ a -> op1' 0xff 0x2 a
     Jmpq_ a -> op1' 0xff 0x4 a
 
+    Movd_ a@OpXMM b -> sse 0x6e a b
+    Movd_ b a@OpXMM -> sse 0x7e a b
+    Movq_ b a@OpXMM -> sse 0xd6 a b
     Movdqa_ a@OpXMM b -> sse 0x6f a b
     Movdqa_ b a@OpXMM -> sse 0x7f a b
     Paddb_  a b -> sse 0xfc a b
@@ -264,9 +267,11 @@ mkCodeBuilder' = \case
     Psllw_  a b -> sseShift 0x71 0x2 0xd1 a b
     Pslld_  a b -> sseShift 0x72 0x2 0xd2 a b
     Psllq_  a b -> sseShift 0x73 0x2 0xd3 a b
+    Pslldq_ a b -> sseShift 0x73 0x7 undefined a b
     Psrlw_  a b -> sseShift 0x71 0x6 0xf1 a b
     Psrld_  a b -> sseShift 0x72 0x6 0xf2 a b
     Psrlq_  a b -> sseShift 0x73 0x6 0xf3 a b
+    Psrldq_ a b -> sseShift 0x73 0x3 undefined a b
     Psraw_  a b -> sseShift 0x71 0x4 0xe1 a b
     Psrad_  a b -> sseShift 0x72 0x4 0xe2 a b
 
@@ -314,8 +319,8 @@ mkCodeBuilder' = \case
             replL x (z: zs) = second (z:) $ replL x zs
 
     Data_ x -> bytesToCodeBuilder x
-    Align_ s -> CodeBuilder 0 (sizeLen s) $ \(n, labs) -> let
-                    n' = fromIntegral $ ((fromIntegral n - 1 :: Int64) .|. (sizeLen s - 1)) + 1
+    Align_ s -> CodeBuilder 0 s $ \(n, labs) -> let
+                    n' = fromIntegral $ ((fromIntegral n - 1 :: Int64) .|. (fromIntegral s - 1)) + 1
                 in (Right <$> zip [n..] (replicate (n' - n) 0x90), (n', labs))
   where
     convertImm :: Bool{-signed-} -> Size -> Operand r s -> First ((Bool, Size), CodeBuilder)
@@ -393,7 +398,7 @@ mkCodeBuilder' = \case
     regprefix2' :: (IsSize s1, IsSize s) => Operand r1 s1 -> Operand r s -> Word8 -> CodeBuilder -> CodeBuilder
     regprefix2' r r' p c = regprefix2 r r' $ extension r p <> c
 
-    sse :: Word8 -> Operand r S128 -> Operand r' S128 -> CodeBuilder
+    sse :: IsSize s => Word8 -> Operand r S128 -> Operand r' s -> CodeBuilder
     sse op a@OpXMM b = regprefix S128 b (codeByte 0x0f <> codeByte op <> reg2x8 a b) mempty
 
     sseShift :: Word8 -> Word8 -> Word8 -> Operand RW S128 -> Operand r S8 -> CodeBuilder
@@ -523,6 +528,8 @@ pattern Shl a b = CodeLine (Shl_ a b)
 pattern Shr a b = CodeLine (Shr_ a b)
 pattern Sar a b = CodeLine (Sar_ a b)
 pattern Xchg a b = CodeLine (Xchg_ a b)
+pattern Movd   a b = CodeLine (Movd_   a b)
+pattern Movq   a b = CodeLine (Movq_   a b)
 pattern Movdqa a b = CodeLine (Movdqa_ a b)
 pattern Paddb  a b = CodeLine (Paddb_  a b)
 pattern Paddw  a b = CodeLine (Paddw_  a b)
@@ -536,9 +543,11 @@ pattern Pxor   a b = CodeLine (Pxor_   a b)
 pattern Psllw  a b = CodeLine (Psllw_  a b)
 pattern Pslld  a b = CodeLine (Pslld_  a b)
 pattern Psllq  a b = CodeLine (Psllq_  a b)
+pattern Pslldq a b = CodeLine (Pslldq_ a b)
 pattern Psrlw  a b = CodeLine (Psrlw_  a b)
 pattern Psrld  a b = CodeLine (Psrld_  a b)
 pattern Psrlq  a b = CodeLine (Psrlq_  a b)
+pattern Psrldq a b = CodeLine (Psrldq_ a b)
 pattern Psraw  a b = CodeLine (Psraw_  a b)
 pattern Psrad  a b = CodeLine (Psrad_  a b)
 pattern Lea a b = CodeLine (Lea_ a b)

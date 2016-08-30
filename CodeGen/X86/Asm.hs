@@ -536,7 +536,8 @@ data CodeLine where
     Rol_, Ror_, Rcl_, Rcr_, Shl_, Shr_, Sar_                 :: IsSize s => Operand RW s -> Operand r S8 -> CodeLine
 
     Movdqa_, Paddb_, Paddw_, Paddd_, Paddq_, Psubb_, Psubw_, Psubd_, Psubq_, Pxor_ :: Operand RW S128 -> Operand r S128 -> CodeLine
-    Psllw_, Pslld_, Psllq_, Psrlw_, Psrld_, Psrlq_, Psraw_, Psrad_ :: Operand RW S128 -> Operand r S8 -> CodeLine
+    Psllw_, Pslld_, Psllq_, Pslldq_, Psrlw_, Psrld_, Psrlq_, Psrldq_, Psraw_, Psrad_ :: Operand RW S128 -> Operand r S8 -> CodeLine
+    Movd_, Movq_ :: (IsSize s, IsSize s') => Operand RW s -> Operand r s' -> CodeLine
 
     Cmov_ :: IsSize s => Condition -> Operand RW s -> Operand RW s -> CodeLine
     Xchg_ :: IsSize s => Operand RW s -> Operand RW s -> CodeLine
@@ -554,7 +555,7 @@ data CodeLine where
     Label_ :: CodeLine
 
     Data_  :: Bytes -> CodeLine
-    Align_ :: Size  -> CodeLine
+    Align_ :: Int   -> CodeLine
 
 ------------------------- show code lines
 
@@ -594,6 +595,8 @@ showCodeLine = \case
     Cmov_ cc op1 op2 -> showOp2 ("cmov" ++ show cc) op1 op2
     Lea_  op1 op2 -> showOp2 "lea"  op1 op2
     Xchg_ op1 op2 -> showOp2 "xchg" op1 op2
+    Movd_   op1 op2 -> showOp2 "movd"   op1 op2
+    Movq_   op1 op2 -> showOp2 "movq"   op1 op2
     Movdqa_ op1 op2 -> showOp2 "movdqa" op1 op2
     Paddb_  op1 op2 -> showOp2 "paddb"  op1 op2
     Paddw_  op1 op2 -> showOp2 "paddw"  op1 op2
@@ -607,9 +610,11 @@ showCodeLine = \case
     Psllw_  op1 op2 -> showOp2 "psllw"  op1 op2
     Pslld_  op1 op2 -> showOp2 "pslld"  op1 op2
     Psllq_  op1 op2 -> showOp2 "psllq"  op1 op2
+    Pslldq_ op1 op2 -> showOp2 "pslldq" op1 op2
     Psrlw_  op1 op2 -> showOp2 "psrlw"  op1 op2
     Psrld_  op1 op2 -> showOp2 "psrld"  op1 op2
     Psrlq_  op1 op2 -> showOp2 "psrlq"  op1 op2
+    Psrldq_ op1 op2 -> showOp2 "psrldq" op1 op2
     Psraw_  op1 op2 -> showOp2 "psraw"  op1 op2
     Psrad_  op1 op2 -> showOp2 "psrad"  op1 op2
     Inc_  op -> showOp1 "inc"  op

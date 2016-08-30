@@ -92,6 +92,8 @@ module CodeGen.X86
     , pattern Shr
     , pattern Sar
     , pattern Xchg
+    , pattern Movd
+    , pattern Movq
     , pattern Movdqa
     , pattern Paddb
     , pattern Paddw
@@ -105,9 +107,11 @@ module CodeGen.X86
     , pattern Psllw
     , pattern Pslld
     , pattern Psllq
+    , pattern Pslldq
     , pattern Psrlw
     , pattern Psrld
     , pattern Psrlq
+    , pattern Psrldq
     , pattern Psraw
     , pattern Psrad
     , pattern Lea
