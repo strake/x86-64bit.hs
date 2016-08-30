@@ -1,6 +1,17 @@
-# Version 0.1.4.1
+# Version 0.2
 
--   support automatic decision between short and near conditional jumps for forward references
+-   simpler API for immediate values: `Add ax, 1`
+-   redesigned addressing API: `Add ax (addr $ rax + 4*rdi + 3)`
+-   support near jumps
+-   support automatic decision between short and near jumps (conditional jumps too)
+-   support more registers and instructions:
+    -   cmovCC instructions
+    -   SSE registers: xmm0 - xmm7
+    -   SSE instructions: movd, movq, movdqa, paddb, paddw, paddd, paddq, psubb, psubw, psubd, psubq, pxor
+    -   SSE instructions (partial support): psllw, pslld, psllq, pslldq, psrlw, psrld, psrlq, psrldq, psraw, psraq
+-   bugfixes
+    -   throw an error if an immediate value does not fit
+    -   fix show instance of shift instructions
 
 # Version 0.1.4
 
