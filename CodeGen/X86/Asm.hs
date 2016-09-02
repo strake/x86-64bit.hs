@@ -534,6 +534,12 @@ instance Show Condition where
         0xe -> "le"
         0xf -> "nle"
 
+pattern N cc <- (notCond -> cc)
+  where N = notCond
+
+notCond :: Condition -> Condition
+notCond (Condition c) = Condition $ c `xor` 1
+
 -------------------------------------------------------------- asm code lines
 
 data CodeLine where

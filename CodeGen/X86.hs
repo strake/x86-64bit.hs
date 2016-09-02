@@ -36,6 +36,7 @@ module CodeGen.X86
     , ipRelValue
     -- * Conditions
     , Condition
+    , pattern N
     , pattern O
     , pattern NO
     , pattern B,  pattern C
