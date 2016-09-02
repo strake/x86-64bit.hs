@@ -100,7 +100,7 @@ instance IsSize s => Arbitrary (Reg s) where
 
 genRegs = RegOp <$> arbitrary
 
-genIPBase = pure $ ipBase $ Label 0
+genIPBase = pure $ ipRel $ Label 0
 
 instance Arbitrary (Addr S64) where
     arbitrary = suchThat (Addr <$> base <*> disp <*> index) ok

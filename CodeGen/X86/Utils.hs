@@ -43,11 +43,8 @@ if_ cc a b = mdo
     l2 <- label
     return ()
 
-lea8 :: IsSize s => Operand RW s -> Operand RW S8 -> Code
-lea8 = lea
-
 leaData r d = mdo
-    lea8 r $ ipBase l1
+    lea r $ ipRel8 l1
     jmp l2
     l1 <- label
     db $ toBytes d

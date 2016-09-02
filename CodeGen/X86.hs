@@ -27,7 +27,8 @@ module CodeGen.X86
     , addr16
     , addr32
     , addr64
-    , ipBase
+    , ipRel
+    , ipRel8
     -- * Operands
     , Access (..)
     , Operand

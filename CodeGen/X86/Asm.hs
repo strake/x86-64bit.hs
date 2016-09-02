@@ -222,7 +222,13 @@ pattern Disp a = Just a
 pattern NoIndex = Nothing
 pattern IndexReg a b = Just (a, b)
 
-ipBase l = IPMemOp $ LabelRelValue S32 l
+-- | intruction pointer relative address
+ipRel :: Label -> Operand rw s
+ipRel l = IPMemOp $ LabelRelValue S32 l
+
+-- | `ipRel` with specialized type
+ipRel8 :: Label -> Operand rw S8
+ipRel8 = ipRel
 
 instance IsSize s => Show (Reg s) where
     show = \case
