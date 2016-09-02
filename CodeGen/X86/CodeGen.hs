@@ -117,10 +117,6 @@ codeBytes bs = CodeBuilder n n $ do
 codeByte :: Word8 -> CodeBuilder
 codeByte = codeBytes . (:[])
 
-bytesToCodeBuilder :: Bytes -> CodeBuilder
-bytesToCodeBuilder = codeBytes . getBytes
-
-
 mkRef :: Size -> Int -> Label -> CodeBuilder
 mkRef s@(sizeLen -> sn) offset (Label l_) = CodeBuilder sn sn $ do
     bs <- lift $ mdo
@@ -130,7 +126,7 @@ mkRef s@(sizeLen -> sn) offset (Label l_) = CodeBuilder sn sn $ do
         ~(ma, mls) <- getFuture
         let i = ls !! (- l - 1)
             vx = i - n - offset
-            z = getBytes $ case s of
+            z = case s of
                 S8  -> case vx of
                     Integral j -> toBytes (j :: Int8)
                     _ -> error $ show vx ++ " does not fit into an Int8"
@@ -161,9 +157,9 @@ mkAutoRef ss (Label l_) = CodeBuilder (minimum sizes) (maximum sizes) $ do
             vx = i - n
             z = g ss
             g [] = error $ show vx ++ " does not fit into auto size"
-            g ((s, c): ss) = case (s, vx - bytesCount c - sizeLen s) of
-                (S8,  Integral j) -> getBytes $ c <> toBytes (j :: Int8)
-                (S32, Integral j) -> getBytes $ c <> toBytes (j :: Int32)
+            g ((s, c): ss) = case (s, vx - length c - sizeLen s) of
+                (S8,  Integral j) -> c <> toBytes (j :: Int8)
+                (S32, Integral j) -> c <> toBytes (j :: Int32)
                 _ -> g ss
             ~(sn, bs, ps')
                 | l < 0 = (length z, z, ps)
@@ -173,15 +169,15 @@ mkAutoRef ss (Label l_) = CodeBuilder (minimum sizes) (maximum sizes) $ do
             vx' = ma - ma'
             (z', s) = g' ss
             g' [] = error $ show vx' ++ " does not fit into auto size"
-            g' ((s, c): ss) = case (s, vx' - bytesCount c - sizeLen s) of
-                (S8,  Integral (j :: Int8)) -> (getBytes c, s)
-                (S32, Integral (j :: Int32)) -> (getBytes c, s)
+            g' ((s, c): ss) = case (s, vx' - length c - sizeLen s) of
+                (S8,  Integral (j :: Int8)) -> (c, s)
+                (S32, Integral (j :: Int32)) -> (c, s)
                 _ -> g' ss
             l = l_ - length ls
         return $ zip [n..] bs
     tell $ Right <$> bs
   where
-    sizes = map (\(s, c) -> sizeLen s + bytesCount c) ss
+    sizes = map (\(s, c) -> sizeLen s + length c) ss
 
 ------------------------------------------------------- code to code builder
 
@@ -331,11 +327,11 @@ mkCodeBuilder' = \case
 
     J_ (Condition c) (Just S8)  l -> codeByte (0x70 .|. c) <> mkRef S8 1 l
     J_ (Condition c) (Just S32) l -> codeByte 0x0f <> codeByte (0x80 .|. c) <> mkRef S32 4 l
-    J_ (Condition c) Nothing    l -> mkAutoRef [(S8, Bytes [0x70 .|. c]), (S32, Bytes [0x0f, 0x80 .|. c])] l
+    J_ (Condition c) Nothing    l -> mkAutoRef [(S8, [0x70 .|. c]), (S32, [0x0f, 0x80 .|. c])] l
 
     Jmp_ (Just S8)  l -> codeByte 0xeb <> mkRef S8 1 l
     Jmp_ (Just S32) l -> codeByte 0xe9 <> mkRef S32 4 l
-    Jmp_ Nothing    l -> mkAutoRef [(S8, Bytes [0xeb]), (S32, Bytes [0xe9])] l
+    Jmp_ Nothing    l -> mkAutoRef [(S8, [0xeb]), (S32, [0xe9])] l
 
     Label_ -> CodeBuilder 0 0 $ do
         bs <- lift $ mdo
@@ -346,7 +342,7 @@ mkCodeBuilder' = \case
             let (bs, ps') = case ps of
                     [] -> ([], [])
                     corr: ps -> (concatMap g corr, ps)
-                g (size, p, v) = zip [p..] $ getBytes $ case (size, v + n) of
+                g (size, p, v) = zip [p..] $ case (size, v + n) of
                     (S8, Integral v) -> toBytes (v :: Int8)
                     (S32, Integral v) -> toBytes (v :: Int32)
                     (s, i) -> error $ show i ++ " doesn't fit into " ++ show s
@@ -354,7 +350,7 @@ mkCodeBuilder' = \case
         tell $ Right <$> bs
 
 
-    Data_ x -> bytesToCodeBuilder x
+    Data_ x -> codeBytes x
 
     Align_ s -> CodeBuilder 0 (s-1) $ do
         bs <- lift $ mdo
@@ -368,7 +364,7 @@ mkCodeBuilder' = \case
 
   where
     convertImm :: Bool{-signed-} -> Size -> Operand r s -> First ((Bool, Size), CodeBuilder)
-    convertImm a b (ImmOp (Immediate c)) = First $ (,) (a, b) . bytesToCodeBuilder <$> integralToBytes a b c
+    convertImm a b (ImmOp (Immediate c)) = First $ (,) (a, b) . codeBytes <$> integralToBytes a b c
     convertImm True b (ImmOp (LabelRelValue s d)) | b == s = FJust $ (,) (True, b) $ mkRef s (sizeLen s) d
     convertImm _ _ _ = FNothing
 
@@ -382,7 +378,7 @@ mkCodeBuilder' = \case
     xchg_a dest = regprefix'' dest 0x43 (reg8 0x0 dest) mempty
 
     toCode :: HasBytes a => a -> CodeBuilder
-    toCode = bytesToCodeBuilder . toBytes
+    toCode = codeBytes . toBytes
 
     sizePrefix_ :: [SReg] -> Size -> Operand r s -> Word8 -> CodeBuilder -> CodeBuilder -> CodeBuilder
     sizePrefix_ rs s r x c im

@@ -46,24 +46,14 @@ pattern Integral xs <- (toIntegralSized -> Just xs)
 
 ------------------------------------------------------- byte sequences
 
-newtype Bytes = Bytes {getBytes :: [Word8]}
-    deriving (Eq, Monoid)
-
-instance Show Bytes where
-    show (Bytes ws) = unwords $ map (concatMap showByte) $ everyNth 4 ws
-
-showBytes (Bytes ws) = unlines $ zipWith showLine [0 ::Int ..] $ everyNth 16 ws
-  where
-    showLine n bs = [showNibble 2 n, showNibble 1 n, showNibble 0 n, '0', ' ', ' '] ++ show (Bytes bs)
-
-bytesCount (Bytes x) = length x
+type Bytes = [Word8]
 
 class HasBytes a where toBytes :: a -> Bytes
 
-instance HasBytes Word8  where toBytes w = Bytes [w]
-instance HasBytes Word16 where toBytes w = Bytes [fromIntegral w, fromIntegral $ w `shiftR` 8]
-instance HasBytes Word32 where toBytes w = Bytes [fromIntegral $ w `shiftR` n | n <- [0, 8.. 24]]
-instance HasBytes Word64 where toBytes w = Bytes [fromIntegral $ w `shiftR` n | n <- [0, 8.. 56]]
+instance HasBytes Word8  where toBytes w = [w]
+instance HasBytes Word16 where toBytes w = [fromIntegral w, fromIntegral $ w `shiftR` 8]
+instance HasBytes Word32 where toBytes w = [fromIntegral $ w `shiftR` n | n <- [0, 8.. 24]]
+instance HasBytes Word64 where toBytes w = [fromIntegral $ w `shiftR` n | n <- [0, 8.. 56]]
 
 instance HasBytes Int8  where toBytes w = toBytes (fromIntegral w :: Word8)
 instance HasBytes Int16 where toBytes w = toBytes (fromIntegral w :: Word16)
@@ -646,7 +636,7 @@ showCodeLine = \case
     Std_   -> showOp0 "std"
 
     Align_ s -> codeLine $ ".align " ++ show s
-    Data_ (Bytes x)
+    Data_ x
         | 2 * length (filter isPrint x) > length x -> showOp "db" $ show (toEnum . fromIntegral <$> x :: String)
         | otherwise -> showOp "db" $ intercalate ", " (show <$> x)
       where
