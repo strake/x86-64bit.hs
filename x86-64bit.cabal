@@ -1,5 +1,5 @@
 name:                x86-64bit
-version:             0.2
+version:             0.3
 homepage:            https://github.com/divipp/x86-64
 synopsis:            Runtime code generation for x86 64 bit machine code
 description:         The primary goal of x86-64bit is to provide a lightweight assembler for machine generated 64 bit x86 assembly instructions. See README.md for further details.
@@ -56,6 +56,7 @@ library
   build-depends:
     base >=4.8 && <4.10,
     monads-tf >=0.1 && <0.2,
+    tardis >= 0.4 && <0.5,
     vector >=0.11 && <0.12,
     QuickCheck >=2.8 && <2.10
 
@@ -71,6 +72,7 @@ test-suite test-x86-64bit
   build-depends:
     base >=4.8 && <4.10,
     monads-tf >=0.1 && <0.2,
+    tardis >= 0.4 && <0.5,
     vector >=0.11 && <0.12,
     QuickCheck >=2.8 && <2.10
 

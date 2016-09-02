@@ -1,3 +1,8 @@
+# Version 0.3
+
+-   simpler API for label handling  
+    (the idea of labels as De-Bruijn indices is abandoned)
+
 # Version 0.2
 
 -   simpler API for immediate values: `Add ax, 1`

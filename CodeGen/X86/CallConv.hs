@@ -18,34 +18,34 @@ import CodeGen.X86.CodeGen
 
 -- On Win64 the caller have to reserve 32 byte "shadow space" on the stack (and clean up after)
 callFun :: Operand RW S64 -> FunPtr a -> Code
-callFun r p 
-  =  Sub rsp 32
-  <> Mov r (imm $ ptrToIntPtr $ castFunPtrToPtr p)
-  <> Call r 
-  <> Add rsp 32
+callFun r p = do
+    sub rsp 32
+    mov r (imm $ ptrToIntPtr $ castFunPtrToPtr p)
+    call r
+    add rsp 32
 
 #elif defined (darwin_HOST_OS)
 
 -- OSX requires 16 byte alignment of the stack...
 callFun :: Operand RW S64 -> FunPtr a -> Code
-callFun r p 
-  =  Push r15              -- we will use r15 (non-volatile) to store old rsp
-  <> Mov r15 15            -- 0xf
-  <> Not r15               -- 0xffff ... fff0
-  <> And r15 rsp           -- align rsp into r15
-  <> Xchg r15 rsp          -- new rsp = aligned, r15 = old rsp
-  <> Mov r (imm $ ptrToIntPtr $ castFunPtrToPtr p)
-  <> Call r 
-  <> Mov rsp r15           -- restore rsp
-  <> Pop r15               -- restore r15
+callFun r p = do
+    push r15              -- we will use r15 (non-volatile) to store old rsp
+    mov r15 15            -- 0xf
+    not r15               -- 0xffff ... fff0
+    and r15 rsp           -- align rsp into r15
+    xchg r15 rsp          -- new rsp = aligned, r15 = old rsp
+    mov r (imm $ ptrToIntPtr $ castFunPtrToPtr p)
+    call r
+    mov rsp r15           -- restore rsp
+    pop r15               -- restore r15
 
 #else
 
 -- helper to call a function
 callFun :: Operand RW S64 -> FunPtr a -> Code
-callFun r p 
-  =  Mov r (imm $ ptrToIntPtr $ castFunPtrToPtr p)
-  <> Call r
+callFun r p = do
+    mov r $ fromIntegral $ ptrToIntPtr $ castFunPtrToPtr p
+    call r
 
 #endif
 
@@ -57,7 +57,7 @@ callFun r p
 -- This is the responsability of the user (this won't save them).
 --
 saveNonVolatile :: Code -> Code
-saveNonVolatile code = prologue <> code <> epilogue <> Ret
+saveNonVolatile code = prologue >> code >> epilogue >> ret
 
 ------------------------------------------------------------------------------ 
 -- calling conventions
@@ -74,17 +74,17 @@ arg4 = r9
 
 result = rax
 
-prologue 
-    =  Push rbp
-    <> Push rbx
-    <> Push rdi
-    <> Push rsi
+prologue = do
+    push rbp
+    push rbx
+    push rdi
+    push rsi
 
-epilogue
-    =  Pop rsi
-    <> Pop rdi
-    <> Pop rbx
-    <> Pop rbp 
+epilogue = do
+    pop rsi
+    pop rdi
+    pop rbx
+    pop rbp
 
 #else
 
@@ -100,13 +100,13 @@ arg6 = r9
 
 result = rax
 
-prologue 
-    =  Push rbp
-    <> Push rbx
+prologue = do
+    push rbp
+    push rbx
 
-epilogue
-    =  Pop rbx
-    <> Pop rbp  
+epilogue = do
+    pop rbx
+    pop rbp
 
 #endif
 

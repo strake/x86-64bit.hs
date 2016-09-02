@@ -4,6 +4,7 @@
 {-# language ScopedTypeVariables #-}
 {-# language DataKinds #-}
 {-# language ForeignFunctionInterface #-}
+{-# language RecursiveDo #-}
 module CodeGen.X86.Utils where
 
 import Data.Char
@@ -19,51 +20,39 @@ import CodeGen.X86.CallConv
 
 -------------------------------------------------------------- derived constructs
 
-(<.>) :: Code -> Code -> Code
-a <.> b = a <> Label <> b
+-- | execute code unless condition is true
+unless cc x = mdo
+    j cc l
+    x
+    l <- label
+    return ()
 
-a <:> b = Scope $ a <.> b
+-- | do while loop construction
+doWhile cc x = do
+    l <- label
+    x
+    j cc l
 
-infixr 5 <:>, <.>
-
--- | auto size backward jump
-jmp_back = Jmp Nothing
-
--- | auto size jump; the extra argument is the code between the jump and the label
-jmp x = if snd (bounds $ mkCodeBuilder x) <= 127 then jmp8 else jmp32
-
--- | short jump
-jmp8 = Jmp $ Just S8
-
--- | near jump
-jmp32 = Jmp $ Just S32
-
--- | auto size conditional forward jump
-j c x = if snd (bounds $ mkCodeBuilder x) <= 127 then j8 c x else j32 c x
-
--- | short conditional forward jump
-j8 c x = J c (Just S8) <> Up x <:> mempty
-
--- | near conditional forward jump
-j32 c x = J c (Just S32) <> Up x <:> mempty
-
--- | auto size conditional backward jump
-x `j_back` c = mempty <:> Up x <> J c Nothing
-
--- | short conditional backward jump
-x `j_back8` c = mempty <:> Up x <> J c (Just S8)
-
--- | near conditional backward jump
-x `j_back32` c = mempty <:> Up x <> J c (Just S32)
-
-if_ c a b = (J c (Just S8) <> Up (Up a <> jmp b) <:> mempty) <> Up b <:> mempty
+-- | if-then-else
+if_ cc a b = mdo
+    j cc l1
+    a
+    jmp l2
+    l1 <- label
+    b
+    l2 <- label
+    return ()
 
 lea8 :: IsSize s => Operand RW s -> Operand RW S8 -> Code
-lea8 = Lea
+lea8 = lea
 
-leaData r d = (lea8 r ipBase <> Up (jmp db) <:> mempty) <> db <:> mempty
-  where
-    db = Data (toBytes d)
+leaData r d = mdo
+    lea8 r $ ipBase l1
+    jmp l2
+    l1 <- label
+    db $ toBytes d
+    l2 <- label
+    return ()
 
 ------------------------------------------------------------------------------ 
 
@@ -73,7 +62,7 @@ foreign import ccall "static stdio.h &printf" printf :: FunPtr a
 -- * utils
 
 mov' :: forall s s' r . IsSize s' => Operand RW s -> Operand r s' -> Code
-mov' a b = Mov (resizeOperand a :: Operand RW s') b
+mov' a b = mov (resizeOperand a :: Operand RW s') b
 
 newtype CString = CString String
 
@@ -84,14 +73,19 @@ instance HasBytes CString where
 all_regs_except_rsp :: [Operand rw S64]
 all_regs_except_rsp = [ rax, rcx, rdx, rbx, {- rsp, -} rbp, rsi, rdi, r8, r9, r10, r11, r12, r13, r14, r15 ]
 
-push_all = mconcat [ Push r | r <-         all_regs_except_rsp ]
-pop_all  = mconcat [ Pop  r | r <- reverse all_regs_except_rsp ]
+push_all = sequence_ [ push r | r <-         all_regs_except_rsp ]
+pop_all  = sequence_ [ pop  r | r <- reverse all_regs_except_rsp ]
 
 traceReg :: IsSize s => String -> Operand RW s -> Code
-traceReg d r = 
-       PushF <> push_all
-    <> mov' arg2 r <> leaData arg1 (CString $ show r ++ " = %" ++ s ++ d ++ "\n") <> Xor rax rax <> callFun r11 printf
-    <> pop_all <> PopF
+traceReg d r = do
+    pushf
+    push_all
+    mov' arg2 r
+    leaData arg1 (CString $ show r ++ " = %" ++ s ++ d ++ "\n")
+    xor_ rax rax
+    callFun r11 printf
+    pop_all
+    popf
   where
     s = case size r of
         S8  -> "hh"

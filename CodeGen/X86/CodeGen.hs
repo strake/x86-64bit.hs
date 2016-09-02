@@ -14,6 +14,7 @@
 {-# language FlexibleContexts #-}
 {-# language FlexibleInstances #-}
 {-# language GeneralizedNewtypeDeriving #-}
+{-# language RecursiveDo #-}
 module CodeGen.X86.CodeGen where
 
 import Numeric
@@ -27,6 +28,7 @@ import Control.Arrow
 import Control.Monad.Reader
 import Control.Monad.Writer
 import Control.Monad.State
+import Control.Monad.Tardis
 import Debug.Trace
 
 import CodeGen.X86.Asm
@@ -83,49 +85,50 @@ no64 s = s
 
 ------------------------------------------------------- code builder
 
-data CodeBuilder
-    = CodeBuilder !Int !Int (CodeBuilderState -> (CodeBuilderRes, CodeBuilderState))
-
-pattern ExactCodeBuilder len f <- (getExactCodeBuilder -> Just (len, f))
-  where ExactCodeBuilder len f = CodeBuilder len len $ \st@(n, _) -> second ((,) (n + len)) $ f st
-
-getExactCodeBuilder (CodeBuilder i j f) | i == j = Just (i, second snd . f)
-getExactCodeBuilder _ = Nothing
-
-codeBuilderLength (ExactCodeBuilder len _) = len
-
-buildCode :: CodeBuilder -> CodeBuilderState -> (CodeBuilderRes, CodeBuilderState)
-buildCode (CodeBuilder _ _ f) st = f st
-
-mapLabelState g (CodeBuilder i j f) = CodeBuilder i j $ \(n, g -> (fx, xs)) -> second (second fx) $ f (n, xs)
-
-censorCodeBuilder g (CodeBuilder i j f) = CodeBuilder i j $ \st -> first (g st) $ f st
-
 type CodeBuilderRes = [Either Int (Int, Word8)]
 
-type CodeBuilderState = (Int, LabelState)
+type CodeBuilderTardis = Tardis (Int, [Int]) (Int, [Int], LabelState)
 
-type LabelState = [Either [(Size, Int, Int)] Int]
+data CodeBuilder = CodeBuilder
+    { minLen, maxLen :: Int
+    , getCodeBuilder :: WriterT CodeBuilderRes CodeBuilderTardis ()
+    }
+
+codeBuilderLength (CodeBuilder a b _) | a == b = a
+
+type LabelState = [[(Size, Int, Int)]]
 
 instance Monoid CodeBuilder where
-    mempty = ExactCodeBuilder 0 $ \(_, st) -> (mempty, st)
-    f `mappend` g = CodeBuilder (i1+i2) (j1+j2) $ \(buildCode f -> (a, buildCode g -> (b, st))) -> (a ++ b, st)
-      where
-        (i1, j1) = bounds f
-        (i2, j2) = bounds g
+    mempty = CodeBuilder 0 0 $ return ()
+    CodeBuilder mi ma a `mappend` CodeBuilder mi' ma' b = CodeBuilder (min mi mi') (max ma ma') $ a >> b
 
-bounds (CodeBuilder i j _) = (i, j)
+codeBytes :: [Word8] -> CodeBuilder
+codeBytes bs = CodeBuilder n n $ do
+    c <- lift $ mdo
+        (c, ls, ps) <- getPast
+        sendFuture (c + n, ls, ps)
+        sendPast (ma + n, mls)
+        ~(ma, mls) <- getFuture
+        return c
+    tell $ Right <$> zip [c..] bs
+  where
+    n = length bs
 
 codeByte :: Word8 -> CodeBuilder
-codeByte c = ExactCodeBuilder 1 $ \(n, labs) -> ([Right (n, c)], labs)
+codeByte = codeBytes . (:[])
 
-mkRef :: Size -> Int -> Int -> CodeBuilder
-mkRef s@(sizeLen -> sn) offset bs = ExactCodeBuilder sn f
-  where
-    f (n, labs) | bs >= length labs = error "missing scope"
-    f (n, labs) = case labs !! bs of
-        Right i -> (Right <$> zip [n..] z, labs)
-          where
+bytesToCodeBuilder :: Bytes -> CodeBuilder
+bytesToCodeBuilder = codeBytes . getBytes
+
+
+mkRef :: Size -> Int -> Label -> CodeBuilder
+mkRef s@(sizeLen -> sn) offset (Label l_) = CodeBuilder sn sn $ do
+    bs <- lift $ mdo
+        (n, ls, ps) <- getPast
+        sendFuture (n + sn, ls, ps')
+        sendPast (ma + sn, mls)
+        ~(ma, mls) <- getFuture
+        let i = ls !! (- l - 1)
             vx = i - n - offset
             z = getBytes $ case s of
                 S8  -> case vx of
@@ -134,36 +137,62 @@ mkRef s@(sizeLen -> sn) offset bs = ExactCodeBuilder sn f
                 S32  -> case vx of
                     Integral j -> toBytes (j :: Int32)
                     _ -> error $ show vx ++ " does not fit into an Int32"
-        Left cs -> (mempty, labs')
-          where
-            labs' = take bs labs ++ Left ((s, n, - n - offset): cs): drop (bs + 1) labs
+            ~(bs, ps')
+                | l < 0 = (z, ps)
+                | otherwise = ([], ins l (s, n, - n - offset) ps)
+            l = l_ - length ls
+        return $ zip [n..] bs
+    tell $ Right <$> bs
 
-mkAutoRef :: [(Size, Bytes)] -> Int -> Int -> CodeBuilder
-mkAutoRef ss offset bs = CodeBuilder (minimum sizes) (maximum sizes) f
-  where
-    sizes = map (\(s, c) -> sizeLen s + bytesCount c) ss
+ins :: Int -> a -> [[a]] -> [[a]]
+ins 0 a [] = [a]: []
+ins 0 a (as:ass) = (a:as): ass
+ins n a [] = []: ins (n-1) a []
+ins n a (as: ass) = as: ins (n-1) a ass
 
-    f (n, labs) | bs >= length labs = error "missing scope"
-    f (n, labs) = case labs !! bs of
-        Left cs -> error "auto length computation for forward references is not supported"
-        Right i -> (Right <$> zip [n..] z, (n + length z, labs))
-          where
-            vx = i - n - offset
+mkAutoRef :: [(Size, Bytes)] -> Label -> CodeBuilder
+mkAutoRef ss (Label l_) = CodeBuilder (minimum sizes) (maximum sizes) $ do
+    bs <- lift $ mdo
+        (n, ls, ps) <- getPast
+        sendFuture (n + sn, ls, ps')
+        sendPast (ma + maximum sizes, mls)
+        ~(ma, mls) <- getFuture
+        let i = ls !! (- l - 1)
+            vx = i - n
             z = g ss
-
             g [] = error $ show vx ++ " does not fit into auto size"
             g ((s, c): ss) = case (s, vx - bytesCount c - sizeLen s) of
                 (S8,  Integral j) -> getBytes $ c <> toBytes (j :: Int8)
                 (S32, Integral j) -> getBytes $ c <> toBytes (j :: Int32)
                 _ -> g ss
+            ~(sn, bs, ps')
+                | l < 0 = (length z, z, ps)
+                | otherwise = (nz, z', ins l (s, n + length z', - n - nz) ps)
+            nz = length z' + sizeLen s
+            ma' = mls !! l
+            vx' = ma - ma'
+            (z', s) = g' ss
+            g' [] = error $ show vx' ++ " does not fit into auto size"
+            g' ((s, c): ss) = case (s, vx' - bytesCount c - sizeLen s) of
+                (S8,  Integral (j :: Int8)) -> (getBytes c, s)
+                (S32, Integral (j :: Int32)) -> (getBytes c, s)
+                _ -> g' ss
+            l = l_ - length ls
+        return $ zip [n..] bs
+    tell $ Right <$> bs
+  where
+    sizes = map (\(s, c) -> sizeLen s + bytesCount c) ss
 
 ------------------------------------------------------- code to code builder
 
 instance Show Code where
+    show = show . withLabels
+
+instance Show LCode where
     show c = unlines $ zipWith3 showLine is (takes (zipWith (-) (tail is ++ [s]) is) bs) ss
       where
-        ss = snd . runWriter . flip evalStateT 0 . flip runReaderT [] . showCode $ c
-        (x, s) = second fst $ buildCode (mkCodeBuilder c) (0, replicate 10{-TODO-} $ Left [])
+        ss = snd . runWriter . flip evalStateT 0 . showCode $ c
+        (x, s) = buildCode c
         bs = V.toList $ V.replicate s 0 V.// [p | Right p <- x]
         is = [i | Left i <- x]
 
@@ -174,29 +203,34 @@ instance Show Code where
 
         maxbytes = 12
 
+{-
 codeBytes c = Bytes $ V.toList $ V.replicate s 0 V.// [p | Right p <- x]
   where
     (x, s) = buildTheCode c
+-}
+buildTheCode :: Code -> (CodeBuilderRes, Int)
+buildTheCode = buildCode . withLabels
 
-buildTheCode x = second fst $ buildCode (mkCodeBuilder x) (0, [])
+buildCode :: LCode -> (CodeBuilderRes, Int)
+buildCode x = (r, len)
+  where
+    ((_, r), (_, (len, _, _))) = flip runTardis ((0, []), (0, [], [])) . runWriterT . getCodeBuilder . mkCodeBuilder $ x
 
-bytesToCodeBuilder :: Bytes -> CodeBuilder
-bytesToCodeBuilder x = ExactCodeBuilder (bytesCount x) $ \(n, labs) -> (Right <$> zip [n..] (getBytes x), labs)
-
-mkCodeBuilder :: Code -> CodeBuilder
+mkCodeBuilder :: LCode -> CodeBuilder
 mkCodeBuilder = \case
+    CodeLine x _ -> x
+    Group x _ -> x
+    AppendCode x _ _ -> x
     EmptyCode -> mempty
-    AppendCode cb _ _ -> cb
 
-    Up a -> mapLabelState (\(x: xs) -> ((x:), xs)) $ mkCodeBuilder a
+newtype CodeM a = CodeM {unCodeM :: StateT Int (Writer LCode) a}
+    deriving (Functor, Applicative, Monad, MonadFix)
 
-    Scope x -> ExactCodeBuilder 0 begin <> mkCodeBuilder x <> ExactCodeBuilder 0 end
-      where
-        begin (n, labs) = (mempty, Left []: labs)
-        end (n, Right _: labs) = (mempty, labs)
-        end (n, _: labs) = trace "warning: missing label" (mempty, labs)
+type Code = CodeM ()
 
-    CodeLine_ cb _ -> censorCodeBuilder (\(addr, _) -> (Left addr:)) cb
+withLabels :: Code -> LCode
+withLabels =
+    snd . runWriter . flip evalStateT 0 . unCodeM
 
 mkCodeBuilder' :: CodeLine -> CodeBuilder
 mkCodeBuilder' = \case
@@ -295,33 +329,43 @@ mkCodeBuilder' = \case
     Cld_   -> codeByte 0xfc
     Std_   -> codeByte 0xfd
 
-    J_ (Condition c) (Just S8)  -> codeByte (0x70 .|. c) <> mkRef S8 1 0
-    J_ (Condition c) (Just S32) -> codeByte 0x0f <> codeByte (0x80 .|. c) <> mkRef S32 4 0
-    J_ (Condition c) Nothing    -> mkAutoRef [(S8, Bytes [0x70 .|. c]), (S32, Bytes [0x0f, 0x80 .|. c])] 0 0
+    J_ (Condition c) (Just S8)  l -> codeByte (0x70 .|. c) <> mkRef S8 1 l
+    J_ (Condition c) (Just S32) l -> codeByte 0x0f <> codeByte (0x80 .|. c) <> mkRef S32 4 l
+    J_ (Condition c) Nothing    l -> mkAutoRef [(S8, Bytes [0x70 .|. c]), (S32, Bytes [0x0f, 0x80 .|. c])] l
 
-    Jmp_ (Just S8)  -> codeByte 0xeb <> mkRef S8 1 0
-    Jmp_ (Just S32) -> codeByte 0xe9 <> mkRef S32 4 0
-    Jmp_ Nothing    -> mkAutoRef [(S8, Bytes [0xeb]), (S32, Bytes [0xe9])] 0 0
+    Jmp_ (Just S8)  l -> codeByte 0xeb <> mkRef S8 1 l
+    Jmp_ (Just S32) l -> codeByte 0xe9 <> mkRef S32 4 l
+    Jmp_ Nothing    l -> mkAutoRef [(S8, Bytes [0xeb]), (S32, Bytes [0xe9])] l
 
-    Label_ -> ExactCodeBuilder 0 lab
-      where
-        lab :: CodeBuilderState -> (CodeBuilderRes, LabelState)
-        lab (n, labs) = (Right <$> concatMap g corr, labs')
-          where
-            (corr, labs') = replL (Right n) labs
+    Label_ -> CodeBuilder 0 0 $ do
+        bs <- lift $ mdo
+            (n, ls, ps) <- getPast
+            sendFuture (n, n: ls, ps')
+            sendPast (ma, ma: mls)
+            ~(ma, mls) <- getFuture
+            let (bs, ps') = case ps of
+                    [] -> ([], [])
+                    corr: ps -> (concatMap g corr, ps)
+                g (size, p, v) = zip [p..] $ getBytes $ case (size, v + n) of
+                    (S8, Integral v) -> toBytes (v :: Int8)
+                    (S32, Integral v) -> toBytes (v :: Int32)
+                    (s, i) -> error $ show i ++ " doesn't fit into " ++ show s
+            return bs
+        tell $ Right <$> bs
 
-            g (size, p, v) = zip [p..] $ getBytes $ case (size, v + n) of
-                (S8, Integral v) -> toBytes (v :: Int8)
-                (S32, Integral v) -> toBytes (v :: Int32)
-                (s, i) -> error $ show i ++ " doesn't fit into " ++ show s
-
-            replL x (Left z: zs) = (z, x: zs)
-            replL x (z: zs) = second (z:) $ replL x zs
 
     Data_ x -> bytesToCodeBuilder x
-    Align_ s -> CodeBuilder 0 s $ \(n, labs) -> let
-                    n' = fromIntegral $ ((fromIntegral n - 1 :: Int64) .|. (fromIntegral s - 1)) + 1
-                in (Right <$> zip [n..] (replicate (n' - n) 0x90), (n', labs))
+
+    Align_ s -> CodeBuilder 0 (s-1) $ do
+        bs <- lift $ mdo
+            (n, ls, ps) <- getPast
+            sendFuture (n', ls, ps)
+            sendPast (ma + s-1, mls)
+            ~(ma, mls) <- getFuture
+            let n' = fromIntegral $ ((fromIntegral n - 1 :: Int64) .|. (fromIntegral s - 1)) + 1
+            return $ zip [n..] $ replicate (n' - n) 0x90
+        tell $ Right <$> bs
+
   where
     convertImm :: Bool{-signed-} -> Size -> Operand r s -> First ((Bool, Size), CodeBuilder)
     convertImm a b (ImmOp (Immediate c)) = First $ (,) (a, b) . bytesToCodeBuilder <$> integralToBytes a b c
@@ -480,96 +524,102 @@ pattern OpXMM <- RegOp XMM{}
 
 -------------------------------------------------------------- asm codes
 
-data Code where
-    Scope       :: Code -> Code
-    Up          :: Code -> Code
-    EmptyCode   :: Code
-    AppendCode  :: CodeBuilder -> Code -> Code -> Code
-    CodeLine_   :: CodeBuilder -> CodeLine -> Code
+data LCode where
+    Group       :: CodeBuilder -> LCode -> LCode
+    EmptyCode   :: LCode
+    AppendCode  :: CodeBuilder -> LCode -> LCode -> LCode
+    CodeLine    :: CodeBuilder -> CodeLine -> LCode
 
-instance Monoid Code where
+instance Monoid LCode where
     mempty  = EmptyCode
     mappend a b = AppendCode (mkCodeBuilder a <> mkCodeBuilder b) a b
 
-pattern CodeLine x <- CodeLine_ _ x
-  where CodeLine x =  CodeLine_ (mkCodeBuilder' x) x
+ret     = mkCodeLine Ret_
+nop     = mkCodeLine Nop_
+pushf   = mkCodeLine PushF_
+popf    = mkCodeLine PopF_
+cmc     = mkCodeLine Cmc_
+clc     = mkCodeLine Clc_
+stc     = mkCodeLine Stc_
+cli     = mkCodeLine Cli_
+sti     = mkCodeLine Sti_
+cld     = mkCodeLine Cld_
+std     = mkCodeLine Std_
+inc a   = mkCodeLine (Inc_ a)
+dec a   = mkCodeLine (Dec_ a)
+not_ a  = mkCodeLine (Not_ a)
+neg a   = mkCodeLine (Neg_ a)
+add a b = mkCodeLine (Add_ a b)
+or_  a b = mkCodeLine (Or_  a b)
+adc a b = mkCodeLine (Adc_ a b)
+sbb a b = mkCodeLine (Sbb_ a b)
+and_ a b = mkCodeLine (And_ a b)
+sub a b = mkCodeLine (Sub_ a b)
+xor_ a b = mkCodeLine (Xor_ a b)
+cmp a b = mkCodeLine (Cmp_ a b)
+test a b = mkCodeLine (Test_ a b)
+mov a b = mkCodeLine (Mov_ a b)
+cmov c a b = mkCodeLine (Cmov_ c a b)
+rol a b = mkCodeLine (Rol_ a b)
+ror a b = mkCodeLine (Ror_ a b)
+rcl a b = mkCodeLine (Rcl_ a b)
+rcr a b = mkCodeLine (Rcr_ a b)
+shl a b = mkCodeLine (Shl_ a b)
+shr a b = mkCodeLine (Shr_ a b)
+sar a b = mkCodeLine (Sar_ a b)
+xchg a b = mkCodeLine (Xchg_ a b)
+movd   a b = mkCodeLine (Movd_   a b)
+movq   a b = mkCodeLine (Movq_   a b)
+movdqa a b = mkCodeLine (Movdqa_ a b)
+paddb  a b = mkCodeLine (Paddb_  a b)
+paddw  a b = mkCodeLine (Paddw_  a b)
+paddd  a b = mkCodeLine (Paddd_  a b)
+paddq  a b = mkCodeLine (Paddq_  a b)
+psubb  a b = mkCodeLine (Psubb_  a b)
+psubw  a b = mkCodeLine (Psubw_  a b)
+psubd  a b = mkCodeLine (Psubd_  a b)
+psubq  a b = mkCodeLine (Psubq_  a b)
+pxor   a b = mkCodeLine (Pxor_   a b)
+psllw  a b = mkCodeLine (Psllw_  a b)
+pslld  a b = mkCodeLine (Pslld_  a b)
+psllq  a b = mkCodeLine (Psllq_  a b)
+pslldq a b = mkCodeLine (Pslldq_ a b)
+psrlw  a b = mkCodeLine (Psrlw_  a b)
+psrld  a b = mkCodeLine (Psrld_  a b)
+psrlq  a b = mkCodeLine (Psrlq_  a b)
+psrldq a b = mkCodeLine (Psrldq_ a b)
+psraw  a b = mkCodeLine (Psraw_  a b)
+psrad  a b = mkCodeLine (Psrad_  a b)
+lea a b = mkCodeLine (Lea_ a b)
+j a c   = mkCodeLine (J_ a Nothing c)
+pop a   = mkCodeLine (Pop_ a)
+push a  = mkCodeLine (Push_ a)
+call a  = mkCodeLine (Call_ a)
+jmpq a  = mkCodeLine (Jmpq_ a)
+jmp b   = mkCodeLine (Jmp_ Nothing b)
+db a    = mkCodeLine (Data_ a)
+align a = mkCodeLine (Align_ a)
 
-pattern Ret = CodeLine Ret_
-pattern Nop = CodeLine Nop_
-pattern PushF = CodeLine PushF_
-pattern PopF = CodeLine PopF_
-pattern Cmc = CodeLine Cmc_
-pattern Clc = CodeLine Clc_
-pattern Stc = CodeLine Stc_
-pattern Cli = CodeLine Cli_
-pattern Sti = CodeLine Sti_
-pattern Cld = CodeLine Cld_
-pattern Std = CodeLine Std_
-pattern Inc a = CodeLine (Inc_ a)
-pattern Dec a = CodeLine (Dec_ a)
-pattern Not a = CodeLine (Not_ a)
-pattern Neg a = CodeLine (Neg_ a)
-pattern Add a b = CodeLine (Add_ a b)
-pattern Or  a b = CodeLine (Or_  a b)
-pattern Adc a b = CodeLine (Adc_ a b)
-pattern Sbb a b = CodeLine (Sbb_ a b)
-pattern And a b = CodeLine (And_ a b)
-pattern Sub a b = CodeLine (Sub_ a b)
-pattern Xor a b = CodeLine (Xor_ a b)
-pattern Cmp a b = CodeLine (Cmp_ a b)
-pattern Test a b = CodeLine (Test_ a b)
-pattern Mov a b = CodeLine (Mov_ a b)
-pattern Cmov c a b = CodeLine (Cmov_ c a b)
-pattern Rol a b = CodeLine (Rol_ a b)
-pattern Ror a b = CodeLine (Ror_ a b)
-pattern Rcl a b = CodeLine (Rcl_ a b)
-pattern Rcr a b = CodeLine (Rcr_ a b)
-pattern Shl a b = CodeLine (Shl_ a b)
-pattern Shr a b = CodeLine (Shr_ a b)
-pattern Sar a b = CodeLine (Sar_ a b)
-pattern Xchg a b = CodeLine (Xchg_ a b)
-pattern Movd   a b = CodeLine (Movd_   a b)
-pattern Movq   a b = CodeLine (Movq_   a b)
-pattern Movdqa a b = CodeLine (Movdqa_ a b)
-pattern Paddb  a b = CodeLine (Paddb_  a b)
-pattern Paddw  a b = CodeLine (Paddw_  a b)
-pattern Paddd  a b = CodeLine (Paddd_  a b)
-pattern Paddq  a b = CodeLine (Paddq_  a b)
-pattern Psubb  a b = CodeLine (Psubb_  a b)
-pattern Psubw  a b = CodeLine (Psubw_  a b)
-pattern Psubd  a b = CodeLine (Psubd_  a b)
-pattern Psubq  a b = CodeLine (Psubq_  a b)
-pattern Pxor   a b = CodeLine (Pxor_   a b)
-pattern Psllw  a b = CodeLine (Psllw_  a b)
-pattern Pslld  a b = CodeLine (Pslld_  a b)
-pattern Psllq  a b = CodeLine (Psllq_  a b)
-pattern Pslldq a b = CodeLine (Pslldq_ a b)
-pattern Psrlw  a b = CodeLine (Psrlw_  a b)
-pattern Psrld  a b = CodeLine (Psrld_  a b)
-pattern Psrlq  a b = CodeLine (Psrlq_  a b)
-pattern Psrldq a b = CodeLine (Psrldq_ a b)
-pattern Psraw  a b = CodeLine (Psraw_  a b)
-pattern Psrad  a b = CodeLine (Psrad_  a b)
-pattern Lea a b = CodeLine (Lea_ a b)
-pattern J a b = CodeLine (J_ a b)
-pattern Pop a = CodeLine (Pop_ a)
-pattern Push a = CodeLine (Push_ a)
-pattern Call a = CodeLine (Call_ a)
-pattern Jmpq a = CodeLine (Jmpq_ a)
-pattern Jmp a  = CodeLine (Jmp_  a)
-pattern Data a = CodeLine (Data_ a)
-pattern Align a = CodeLine (Align_ a)
-pattern Label = CodeLine (Label_)
+label :: CodeM Label
+label = do
+    i <- CodeM get
+    CodeM $ put $ i+1
+    mkCodeLine Label_
+    return $ Label i
+
+mkCodeLine :: CodeLine -> Code
+mkCodeLine x = CodeM $ tell $ CodeLine (tellAddr <> mkCodeBuilder' x) x
+
+tellAddr = CodeBuilder 0 0 $ do
+    (c, _, _) <- lift getPast
+    tell [Left c]
 
 -------------
+
 
 showCode = \case
     EmptyCode  -> return ()
     AppendCode _ a b -> showCode a >> showCode b
-
-    Scope c -> get >>= \i -> put (i+1) >> local (i:) (showCode c)
-
-    Up c -> local tail $ showCode c
-
-    CodeLine x -> showCodeLine x
+    Group _ c -> codeLine "{" >> showCode c >> codeLine "}"
+    CodeLine _ x -> showCodeLine x
 

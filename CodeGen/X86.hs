@@ -8,30 +8,30 @@ module CodeGen.X86
     , Size (..)
     , HasSize (..)
     , IsSize
-    -- * Operands
-    , Access (..)
-    , Operand
-    , resizeOperand
-    -- ** Memory references
+    -- * Registers
+    -- ** 64 bit registers
+    , rax, rcx, rdx, rbx, rsp, rbp, rsi, rdi, r8, r9, r10, r11, r12, r13, r14, r15
+    -- ** 32 bit registers
+    , eax, ecx, edx, ebx, esp, ebp, esi, edi, r8d, r9d, r10d, r11d, r12d, r13d, r14d, r15d
+    -- ** 16 bit registers
+    , ax, cx, dx, bx, sp, bp, si, di, r8w, r9w, r10w, r11w, r12w, r13w, r14w, r15w
+    -- ** 8 bit low registers
+    , al, cl, dl, bl, spl, bpl, sil, dil, r8b, r9b, r10b, r11b, r12b, r13b, r14b, r15b
+    -- ** 8 bit high registers
+    , ah, ch, dh, bh
+    -- ** SSE registers
+    , xmm0, xmm1, xmm2, xmm3, xmm4, xmm5, xmm6, xmm7
+    -- * Addresses
     , addr
     , addr8
     , addr16
     , addr32
     , addr64
     , ipBase
-    -- ** Registers
-    -- *** 64 bit registers
-    , rax, rcx, rdx, rbx, rsp, rbp, rsi, rdi, r8, r9, r10, r11, r12, r13, r14, r15
-    -- *** 32 bit registers
-    , eax, ecx, edx, ebx, esp, ebp, esi, edi, r8d, r9d, r10d, r11d, r12d, r13d, r14d, r15d
-    -- *** 16 bit registers
-    , ax, cx, dx, bx, sp, bp, si, di, r8w, r9w, r10w, r11w, r12w, r13w, r14w, r15w
-    -- *** 8 bit low registers
-    , al, cl, dl, bl, spl, bpl, sil, dil, r8b, r9b, r10b, r11b, r12b, r13b, r14b, r15b
-    -- *** 8 bit high registers
-    , ah, ch, dh, bh
-    -- *** SSE registers
-    , xmm0, xmm1, xmm2, xmm3, xmm4, xmm5, xmm6, xmm7
+    -- * Operands
+    , Access (..)
+    , Operand
+    , resizeOperand
     -- * Conditions
     , Condition
     , pattern O
@@ -50,100 +50,102 @@ module CodeGen.X86
     , pattern NL
     , pattern NG, pattern LE
     , pattern G,  pattern NLE
-    -- * Assembly codes
-    , Code
-    , pattern Ret
-    , pattern Nop
-    , pattern PushF
-    , pattern PopF
-    , pattern Cmc
-    , pattern Clc
-    , pattern Stc
-    , pattern Cli
-    , pattern Sti
-    , pattern Cld
-    , pattern Std
-    , pattern Inc
-    , pattern Dec
-    , pattern Not
-    , pattern Neg
-    , pattern Add
-    , pattern Or
-    , pattern Adc
-    , pattern Sbb
-    , pattern And
-    , pattern Sub
-    , pattern Xor
-    , pattern Cmp
-    , pattern Test
-    , pattern Mov
-    , pattern Cmov
-    , pattern Rol
-    , pattern Ror
-    , pattern Rcl
-    , pattern Rcr
-    , pattern Shl
-    , pattern Shr
-    , pattern Sar
-    , pattern Xchg
-    , pattern Movd
-    , pattern Movq
-    , pattern Movdqa
-    , pattern Paddb
-    , pattern Paddw
-    , pattern Paddd
-    , pattern Paddq
-    , pattern Psubb
-    , pattern Psubw
-    , pattern Psubd
-    , pattern Psubq
-    , pattern Pxor
-    , pattern Psllw
-    , pattern Pslld
-    , pattern Psllq
-    , pattern Pslldq
-    , pattern Psrlw
-    , pattern Psrld
-    , pattern Psrlq
-    , pattern Psrldq
-    , pattern Psraw
-    , pattern Psrad
-    , pattern Lea
-    , pattern J
-    , pattern Pop
-    , pattern Push
-    , pattern Call
-    , pattern Jmpq
-    , pattern Jmp
-    , pattern Data
-    , pattern Align
-    , pattern Label
-    , pattern Scope
-    , pattern Up
-    -- * Compound assembly codes
-    , (<>)
-    , (<.>), (<:>)
-    , jmp, jmp_back, jmp8, jmp32
-    , j, j8, j32
-    , j_back, j_back8, j_back32
+    -- * Instructions
+    , Code, CodeM
+    -- ** Pseudo instructions
+    , db
+    , align
+    , Label
+    , label
+    -- ** Control
+    , j
+    , jmp
+    , jmpq
+    , call
+    , ret
+    -- ** Flags
+    , cmc
+    , clc
+    , stc
+    , cli
+    , sti
+    , cld
+    , std
+    , pushf
+    , popf
+    , cmp
+    , test
+    -- ** Arithmetic
+    , inc
+    , dec
+    , not_
+    , neg
+    , add
+    , adc
+    , sub
+    , sbb
+    , and_
+    , or_
+    , xor_
+    , rol
+    , ror
+    , rcl
+    , rcr
+    , shl
+    , shr
+    , sar
+    , lea
+    -- ** Other
+    , nop
+    , xchg
+    , mov
+    , cmov
+    , pop
+    , push
+    -- ** SSE
+    , movd
+    , movq
+    , movdqa
+    , paddb
+    , paddw
+    , paddd
+    , paddq
+    , psubb
+    , psubw
+    , psubd
+    , psubq
+    , pxor
+    , psllw
+    , pslld
+    , psllq
+    , pslldq
+    , psrlw
+    , psrld
+    , psrlq
+    , psrldq
+    , psraw
+    , psrad
+    -- * Compound instructions
+    , unless
+    , doWhile
     , if_
-    , lea8
     , leaData
+    , traceReg
     -- * Compilation
     , Callable
     , compile
-    -- * Calling C and Haskell from Assembly
-    , callFun
+    -- * Calling convention
     , saveNonVolatile
     , arg1, arg2, arg3, arg4
     , result
+    -- * Calling C and Haskell from Assembly
+    , callFun
+    , printf
     , CallableHs
     , hsPtr
+    , CString (..)
     -- * Misc
     , runTests
-    , CString (..)
-    , traceReg
-    , printf
     ) where
 
 import Data.Monoid

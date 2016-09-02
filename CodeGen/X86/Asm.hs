@@ -177,23 +177,31 @@ data Operand :: Access -> Size -> * where
 addr :: IsSize s => Address s -> Operand rw s'
 addr = MemOp . makeAddr
 
+-- | `addr` with specialized type
 addr8 :: IsSize s => Address s -> Operand rw S8
 addr8 = addr
 
+-- | `addr` with specialized type
 addr16 :: IsSize s => Address s -> Operand rw S16
 addr16 = addr
 
+-- | `addr` with specialized type
 addr32 :: IsSize s => Address s -> Operand rw S32
 addr32 = addr
 
+-- | `addr` with specialized type
 addr64 :: IsSize s => Address s -> Operand rw S64
 addr64 = addr
 
 data Immediate a
     = Immediate a
-    | LabelRelValue Size{-size hint-} !LabelIndex
+    | LabelRelValue Size{-size hint-} Label
 
-type LabelIndex = Int
+-- Type of labels
+newtype Label = Label {unLabel :: Int}
+
+instance Show Label where
+    show (Label i) = ".l" ++ show i
 
 -- | Operand access modes
 data Access
@@ -224,7 +232,7 @@ pattern Disp a = Just a
 pattern NoIndex = Nothing
 pattern IndexReg a b = Just (a, b)
 
-ipBase = IPMemOp $ LabelRelValue S32 0
+ipBase l = IPMemOp $ LabelRelValue S32 l
 
 instance IsSize s => Show (Reg s) where
     show = \case
@@ -260,20 +268,18 @@ instance IsSize s => Show (Addr s) where
         f False = " - "
 
 instance IsSize s => Show (Operand a s) where
-    show = showOperand show
+    show = \case
+        ImmOp w -> show w
+        RegOp r -> show r
+        r@(MemOp a) -> show (size r) ++ " [" ++ show a ++ "]"
+        r@(IPMemOp x) -> show (size r) ++ " [" ++ "rel " ++ show x ++ "]"
+      where
+        showp x | x < 0 = " - " ++ show (-x)
+        showp x = " + " ++ show x
 
-showOperand mklab = \case
-    ImmOp w -> showImm w
-    RegOp r -> show r
-    r@(MemOp a) -> show (size r) ++ " [" ++ show a ++ "]"
-    r@(IPMemOp x) -> show (size r) ++ " [" ++ "rel " ++ showImm x ++ "]"
-  where
-    showp x | x < 0 = " - " ++ show (-x)
-    showp x = " + " ++ show x
-
-    showImm :: Show a => Immediate a -> String
-    showImm (Immediate x) = show x
-    showImm (LabelRelValue _ x) = mklab x
+instance Show a => Show (Immediate a) where
+    show (Immediate x) = show x
+    show (LabelRelValue s x) = show x
 
 instance IsSize s => HasSize (Operand a s) where
     size _ = size (ssize :: SSize s)
@@ -293,12 +299,14 @@ instance IsSize s => HasSize (Reg s) where
 instance IsSize s => HasSize (IndexReg s) where
     size _ = size (ssize :: SSize s)
 
-imm :: (Integral a, Bits a) => a -> Operand R s
-imm (Integral x) = ImmOp $ Immediate x
-
 instance (rw ~ R) => Num (Operand rw s) where
-    negate (ImmOp (Immediate x)) = imm (negate x)
-    fromInteger = imm
+    negate (ImmOp (Immediate x)) = ImmOp $ Immediate $ negate x
+    fromInteger (Integral x) = ImmOp $ Immediate x
+    (+) = error "(+) @Operand"
+    (-) = error "(-) @Operand"
+    (*) = error "(*) @Operand"
+    abs = error "abs @Operand"
+    signum = error "signum @Operand"
 
 instance Monoid (Addr s) where
     mempty = Addr (getFirst mempty) (getFirst mempty) (getFirst mempty)
@@ -347,6 +355,8 @@ instance Num (Address s) where
             GT -> p': f (p: rs) rs'
             EQ | t + t' == 0 -> f rs rs'
                | otherwise   -> (t + t', r): f rs rs'
+    abs = error "abs @Address"
+    signum = error "signum @Address"
 
 makeAddr :: Address s -> Addr s
 makeAddr (Address [(1, r)] d) = base r <> disp d
@@ -549,8 +559,8 @@ data CodeLine where
     Call_ :: Operand RW S64 -> CodeLine
     Jmpq_ :: Operand RW S64 -> CodeLine
 
-    J_    :: Condition -> Maybe Size -> CodeLine
-    Jmp_  :: Maybe Size -> CodeLine
+    J_    :: Condition -> Maybe Size -> Label -> CodeLine
+    Jmp_  :: Maybe Size -> Label -> CodeLine
 
     Label_ :: CodeLine
 
@@ -559,21 +569,19 @@ data CodeLine where
 
 ------------------------- show code lines
 
-getLabel i = ($ i) <$> getLabels
-
-getLabels = f <$> ask
-  where
-    f xs i = case drop i xs of
-        [] -> ".l?"
-        (i: _) -> ".l" ++ show i
+newLabel = do
+    i <- get
+    put $ i + 1
+    return $ Label i
 
 codeLine x = tell [x]
 
 showOp0 s = codeLine s
 showOp s a = showOp0 $ s ++ " " ++ a
-showOp1 s a = getLabels >>= \f -> showOp s $ showOperand f a
-showOp2 s a b = getLabels >>= \f -> showOp s $ showOperand f a ++ ", " ++ showOperand f b
+showOp1 s a = showOp s $ show a
+showOp2 s a b = showOp s $ show a ++ ", " ++ show b
 
+showCodeLine :: CodeLine -> StateT Int (Writer [String]) ()
 showCodeLine = \case
     Add_  op1 op2 -> showOp2 "add"  op1 op2
     Or_   op1 op2 -> showOp2 "or"   op1 op2
@@ -644,7 +652,7 @@ showCodeLine = \case
       where
         isPrint c = c >= 32 && c <= 126
 
-    J_ cc s -> getLabel 0 >>= \l -> showOp ("j" ++ show cc) $ (case s of Just S8 -> "short "; Just S32 -> "near "; _ -> "") ++ l
-    Jmp_ s  -> getLabel 0 >>= \l -> showOp "jmp" $ (case s of Just S8 -> "short "; Just S32 -> "near "; _ -> "") ++ l
-    Label_  -> getLabel 0 >>= codeLine
+    J_ cc s l -> showOp ("j" ++ show cc) $ (case s of Just S8 -> "short "; Just S32 -> "near "; _ -> "") ++ show l
+    Jmp_ s  l -> showOp "jmp" $ (case s of Just S8 -> "short "; Just S32 -> "near "; _ -> "") ++ show l
+    Label_    -> newLabel >>= codeLine . show
 

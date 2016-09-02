@@ -14,6 +14,7 @@
 {-# language FlexibleContexts #-}
 {-# language FlexibleInstances #-}
 {-# language GeneralizedNewtypeDeriving #-}
+{-# language RecursiveDo #-}
 {-# LANGUAGE TemplateHaskell #-}
 module CodeGen.X86.Tests (runTests) where
 
@@ -24,7 +25,7 @@ import Data.Bits
 import Data.Int
 import Data.Word
 
-import Test.QuickCheck hiding ((.&.))
+import Test.QuickCheck hiding ((.&.), label)
 import Debug.Trace
 
 import CodeGen.X86.Asm
@@ -99,7 +100,7 @@ instance IsSize s => Arbitrary (Reg s) where
 
 genRegs = RegOp <$> arbitrary
 
-genIPBase = pure ipBase
+genIPBase = pure $ ipBase $ Label 0
 
 instance Arbitrary (Addr S64) where
     arbitrary = suchThat (Addr <$> base <*> disp <*> index) ok
@@ -132,34 +133,34 @@ instance IsSize s => Arbitrary (Operand RW s) where
 
 instance IsSize s => Arbitrary (Operand R s) where
     arbitrary = oneof
-        [ imm <$> oneof (arbVal <$> [S8, S16, S32, S64])
+        [ fromIntegral <$> oneof (arbVal <$> [S8, S16, S32, S64])
         , genRegs
         , genMems
         , genIPBase
         ]
 
-instance Arbitrary Code where
+instance Arbitrary CodeLine where
     arbitrary = oneof
-        [ op2 Add
-        , op2 Or
-        , op2 Adc
-        , op2 Sbb
-        , op2 And
-        , op2 Sub
-        , op2 Xor
-        , op2 Cmp
-        , op2 Test
-        , op2' Rol
-        , op2' Ror
-        , op2' Rcl
-        , op2' Rcr
-        , op2' Shl
-        , op2' Shr
-        , op2' Sar
-        , op2'' Mov
+        [ op2 Add_
+        , op2 Or_
+        , op2 Adc_
+        , op2 Sbb_
+        , op2 And_
+        , op2 Sub_
+        , op2 Xor_
+        , op2 Cmp_
+        , op2 Test_
+        , op2' Rol_
+        , op2' Ror_
+        , op2' Rcl_
+        , op2' Rcr_
+        , op2' Shl_
+        , op2' Shr_
+        , op2' Sar_
+        , op2'' Mov_
         ]
       where
-        op2 :: (forall s . IsSize s => Operand RW s -> Operand R s -> Code) -> Gen Code
+        op2 :: (forall s . IsSize s => Operand RW s -> Operand R s -> CodeLine) -> Gen CodeLine
         op2 op = oneof
             [ f op (arbitrary :: Gen (Operand RW S8))  arbitrary
             , f op (arbitrary :: Gen (Operand RW S16)) arbitrary
@@ -167,10 +168,10 @@ instance Arbitrary Code where
             , f op (arbitrary :: Gen (Operand RW S64)) arbitrary
             ]
           where
-            f :: forall s . IsSize s => (Operand RW s -> Operand R s -> Code) -> Gen (Operand RW s) -> Gen (Operand R s) -> Gen Code
+            f :: forall s . IsSize s => (Operand RW s -> Operand R s -> CodeLine) -> Gen (Operand RW s) -> Gen (Operand R s) -> Gen CodeLine
             f op a b = uncurry op <$> suchThat ((,) <$> a <*> b) (\(a, b) -> noHighRex (regs a <> regs b) && ok' a b && okk a b)
 
-        op2'' :: (forall s . IsSize s => Operand RW s -> Operand R s -> Code) -> Gen Code
+        op2'' :: (forall s . IsSize s => Operand RW s -> Operand R s -> CodeLine) -> Gen CodeLine
         op2'' op = oneof
             [ f op (arbitrary :: Gen (Operand RW S8))  arbitrary
             , f op (arbitrary :: Gen (Operand RW S16)) arbitrary
@@ -178,10 +179,10 @@ instance Arbitrary Code where
             , f op (arbitrary :: Gen (Operand RW S64)) arbitrary
             ]
           where
-            f :: forall s . IsSize s => (Operand RW s -> Operand R s -> Code) -> Gen (Operand RW s) -> Gen (Operand R s) -> Gen Code
+            f :: forall s . IsSize s => (Operand RW s -> Operand R s -> CodeLine) -> Gen (Operand RW s) -> Gen (Operand R s) -> Gen CodeLine
             f op a b = uncurry op <$> suchThat ((,) <$> a <*> b) (\(a, b) -> noHighRex (regs a <> regs b) && ok' a b && oki a b)
 
-        op2' :: (forall s . IsSize s => Operand RW s -> Operand R S8 -> Code) -> Gen Code
+        op2' :: (forall s . IsSize s => Operand RW s -> Operand R S8 -> CodeLine) -> Gen CodeLine
         op2' op = oneof
             [ f op (arbitrary :: Gen (Operand RW S8))  arb
             , f op (arbitrary :: Gen (Operand RW S16)) arb
@@ -190,11 +191,11 @@ instance Arbitrary Code where
             ]
           where
             arb = oneof
-                [ imm <$> (arbitrary :: Gen Word8)
+                [ fromIntegral <$> (arbitrary :: Gen Word8)
                 , return cl
                 ]
 
-            f :: forall s . IsSize s => (Operand RW s -> Operand R S8 -> Code) -> Gen (Operand RW s) -> Gen (Operand R S8) -> Gen Code
+            f :: forall s . IsSize s => (Operand RW s -> Operand R S8 -> CodeLine) -> Gen (Operand RW s) -> Gen (Operand R S8) -> Gen CodeLine
             f op a b = uncurry op <$> suchThat ((,) <$> a <*> b) (\(a, b) -> noHighRex (regs a <> regs b) && ok' a b && okk a b && noteqreg a b)
 
         noteqreg a b = x == nub x where x = map phisicalReg $ regs a ++ regs b
@@ -212,25 +213,25 @@ instance Arbitrary Code where
 
 ---------------------------------------------------
 
-evalOp :: forall a . (HasSigned a, Integral a, Integral (Signed a), FiniteBits (Signed a), Num a, FiniteBits a) => Code -> Bool -> a -> a -> ((Bool, Bool), a)
+evalOp :: forall a . (HasSigned a, Integral a, Integral (Signed a), FiniteBits (Signed a), Num a, FiniteBits a) => CodeLine -> Bool -> a -> a -> ((Bool, Bool), a)
 evalOp op c = case op of
-    Add{}  -> mk (+)
-    Or{}   -> mk (.|.)
-    Adc{}  -> mk $ if c then \a b -> a + b + 1 else (+)
-    Sbb{}  -> mk $ if c then \a b -> a - b - 1 else (-)
-    And{}  -> mk (.&.)
-    Sub{}  -> mk (-)
-    Xor{}  -> mk xor
-    Cmp{}  -> mk_ (-) (\a b -> a)
-    Test{} -> mk_ (.&.) (\a b -> a)
-    Mov{}  -> \a b -> ((c, False), b)
-    Shl{}  -> \a b -> let i = fromIntegral (b .&. shiftMask) in ((if i == 0 then c else a `testBit` (finiteBitSize a - i), False), a `shiftL` i)
-    Shr{}  -> \a b -> let i = fromIntegral (b .&. shiftMask) in ((if i == 0 then c else a `testBit` (i-1), False), a `shiftR` i)
-    Sar{}  -> \a b -> let i = fromIntegral (b .&. shiftMask) in ((if i == 0 then c else toSigned a `testBit'` (i-1), False), fromSigned (toSigned a `shiftR` i))
-    Rol{}  -> \a b -> let i = fromIntegral (b .&. shiftMask) in ((if i == 0 then c else a `testBit` ((finiteBitSize a - i) `mod` finiteBitSize a), False), a `roL` i)
-    Ror{}  -> \a b -> let i = fromIntegral (b .&. shiftMask) in ((if i == 0 then c else a `testBit` ((i-1) `mod` finiteBitSize a), False), a `roR` i)
-    Rcl{}  -> \a b -> let i = fromIntegral (b .&. shiftMask) `mod` (finiteBitSize a + 1) in ((if i == 0 then c else a `testBit` (finiteBitSize a - i), False), rcL c a i)
-    Rcr{}  -> \a b -> let i = fromIntegral (b .&. shiftMask) `mod` (finiteBitSize a + 1) in ((if i == 0 then c else a `testBit` (i-1), False), rcR c a i)
+    Add_{}  -> mk (+)
+    Or_{}   -> mk (.|.)
+    Adc_{}  -> mk $ if c then \a b -> a + b + 1 else (+)
+    Sbb_{}  -> mk $ if c then \a b -> a - b - 1 else (-)
+    And_{}  -> mk (.&.)
+    Sub_{}  -> mk (-)
+    Xor_{}  -> mk xor
+    Cmp_{}  -> mk_ (-) (\a b -> a)
+    Test_{} -> mk_ (.&.) (\a b -> a)
+    Mov_{}  -> \a b -> ((c, False), b)
+    Shl_{}  -> \a b -> let i = fromIntegral (b .&. shiftMask) in ((if i == 0 then c else a `testBit` (finiteBitSize a - i), False), a `shiftL` i)
+    Shr_{}  -> \a b -> let i = fromIntegral (b .&. shiftMask) in ((if i == 0 then c else a `testBit` (i-1), False), a `shiftR` i)
+    Sar_{}  -> \a b -> let i = fromIntegral (b .&. shiftMask) in ((if i == 0 then c else toSigned a `testBit'` (i-1), False), fromSigned (toSigned a `shiftR` i))
+    Rol_{}  -> \a b -> let i = fromIntegral (b .&. shiftMask) in ((if i == 0 then c else a `testBit` ((finiteBitSize a - i) `mod` finiteBitSize a), False), a `roL` i)
+    Ror_{}  -> \a b -> let i = fromIntegral (b .&. shiftMask) in ((if i == 0 then c else a `testBit` ((i-1) `mod` finiteBitSize a), False), a `roR` i)
+    Rcl_{}  -> \a b -> let i = fromIntegral (b .&. shiftMask) `mod` (finiteBitSize a + 1) in ((if i == 0 then c else a `testBit` (finiteBitSize a - i), False), rcL c a i)
+    Rcr_{}  -> \a b -> let i = fromIntegral (b .&. shiftMask) `mod` (finiteBitSize a + 1) in ((if i == 0 then c else a `testBit` (i-1), False), rcR c a i)
 
   where
     mk :: (forall b . (Num b, Bits b, Integral b) => b -> b -> b) -> a -> a -> ((Bool, Bool), a)
@@ -271,7 +272,7 @@ instance Arbitrary InstrTest where
     arbitrary = do
         i <- arbitrary
         cF <- arbitrary
-        let   fff :: forall s s' r . (IsSize s, IsSize s') => Code -> (Operand RW s -> Operand r s' -> Code) -> Operand RW s -> Operand r s' -> Gen InstrTest
+        let   fff :: forall s s' r . (IsSize s, IsSize s') => CodeLine -> (Operand RW s -> Operand r s' -> CodeLine) -> Operand RW s -> Operand r s' -> Gen InstrTest
               fff op op' a b = do
                 let
                     (f1: f2: _) = map RegOp $ filter (`notElem` (regi a ++ regi b)) $ NormalReg <$> [8..15]
@@ -291,85 +292,102 @@ instance Arbitrary InstrTest where
 
                 (av, bv, initab) <- ff a b
                 let
-                    code = foldMap Push sr <> Mov f1 rsp <> PushF <> Pop rax <> Push rax <> PopF
-                        <> initab (initcf <> cc <> mova) <> mkRes
-                        <> Mov rsp f1 {- <> traceReg "X" rdx' -} <> foldMap Pop (reverse sr) <> Ret
+                    code = mdo
+                        mapM_ push sr
+                        mov f1 rsp
+                        pushf
+                        pop rax
+                        push rax
+                        popf
+                        initab (initcf >> cc >> mova)
+                        mkRes
+                        mov rsp f1 {- <> traceReg "X" rdx' -}
+                        mapM_ pop $ reverse sr
+                        ret
 
                     sr = [rsi, rdi, rbx, rbp, r12, r13, r14, r15]
 
-                    cc = i
-                    initcf = if cF then Stc else Clc
+                    cc = mkCodeLine i
+                    initcf = if cF then stc else clc
                     mova = case a of
-                        RegOp (NormalReg 0x2) -> mempty
-                        _ -> Mov rdx' a
-                    mkRes = otest cc (if_ (if cF' then C else NC) (Xor rax rax) (Xor rax rax <> Mov rcx res <> Cmp rcx' rdx' <> j NZ (Inc rax)))
+                        RegOp (NormalReg 0x2) -> return ()
+                        _ -> mov rdx' a
+                    mkRes = otest i $ if_ (if cF' then C else NC) (xor_ rax rax) $ do
+                        xor_ rax rax
+                        mov rcx res
+                        cmp rcx' rdx'
+                        unless NZ $ inc rax
                     isShift = \case
-                        Rol{} -> True
-                        Ror{} -> True
-                        Rcl{} -> True
-                        Rcr{} -> True
-                        Shl{} -> True
-                        Shr{} -> True
-                        Sar{} -> True
+                        Rol_{} -> True
+                        Ror_{} -> True
+                        Rcl_{} -> True
+                        Rcr_{} -> True
+                        Shl_{} -> True
+                        Shr_{} -> True
+                        Sar_{} -> True
                         _ -> False
                     otest i x | isShift i = x
-                    otest _ x = if_ (if oF' then O else NO) (Xor rax rax) x
+                    otest _ x = if_ (if oF' then O else NO) (xor_ rax rax) x
 
                     rcx' = resizeOperand rcx :: Operand RW s
                     rdx' = resizeOperand rdx :: Operand RW s
                     sa = size a
 
                     ((cF', oF'), res) = case sa of
-                        S8  -> imm <$> evalOp op cF (fromIntegral av) (fromIntegral bv :: Word8)
-                        S16 -> imm <$> evalOp op cF (fromIntegral av) (fromIntegral bv :: Word16)
-                        S32 -> imm <$> evalOp op cF (fromIntegral av) (fromIntegral bv :: Word32)
-                        S64 -> imm <$> evalOp op cF (fromIntegral av) (fromIntegral bv :: Word64)
+                        S8  -> fromIntegral <$> evalOp op cF (fromIntegral av) (fromIntegral bv :: Word8)
+                        S16 -> fromIntegral <$> evalOp op cF (fromIntegral av) (fromIntegral bv :: Word16)
+                        S32 -> fromIntegral <$> evalOp op cF (fromIntegral av) (fromIntegral bv :: Word32)
+                        S64 -> fromIntegral <$> evalOp op cF (fromIntegral av) (fromIntegral bv :: Word64)
 
-                    msg = unlines [show i, "code: " ++ show cc, "input a: " ++ show av, "input b: " ++ show bv, "input flags: " ++ show cF, "output: " ++ show res, "output flags: " ++ show cF' ++ " " ++ show oF']
+                    msg = unlines [show cc, "input a: " ++ show av, "input b: " ++ show bv, "input flags: " ++ show cF, "output: " ++ show res, "output flags: " ++ show cF' ++ " " ++ show oF']
 
-                return $ traceShow i $ IT msg code
+                return $ traceShow cc $ IT msg code
 
         case i of
-            Add a_ b_ -> fff i Add a_ b_
-            Or  a_ b_ -> fff i Or  a_ b_
-            Adc a_ b_ -> fff i Adc a_ b_
-            Sbb a_ b_ -> fff i Sbb a_ b_
-            And a_ b_ -> fff i And a_ b_
-            Sub a_ b_ -> fff i Sub a_ b_
-            Xor a_ b_ -> fff i Xor a_ b_
-            Cmp a_ b_ -> fff i Cmp a_ b_
-            Test a_ b_ -> fff i Test a_ b_
-            Rol a_ b_ -> fff i Rol a_ b_
-            Ror a_ b_ -> fff i Ror a_ b_
-            Rcl a_ b_ -> fff i Rcl a_ b_
-            Rcr a_ b_ -> fff i Rcr a_ b_
-            Shl a_ b_ -> fff i Shl a_ b_
-            Shr a_ b_ -> fff i Shr a_ b_
-            Sar a_ b_ -> fff i Sar a_ b_
-            Mov a_ b_ -> fff i Mov a_ b_
+            Add_ a_ b_ -> fff i Add_ a_ b_
+            Or_  a_ b_ -> fff i Or_  a_ b_
+            Adc_ a_ b_ -> fff i Adc_ a_ b_
+            Sbb_ a_ b_ -> fff i Sbb_ a_ b_
+            And_ a_ b_ -> fff i And_ a_ b_
+            Sub_ a_ b_ -> fff i Sub_ a_ b_
+            Xor_ a_ b_ -> fff i Xor_ a_ b_
+            Cmp_ a_ b_ -> fff i Cmp_ a_ b_
+            Test_ a_ b_ -> fff i Test_ a_ b_
+            Rol_ a_ b_ -> fff i Rol_ a_ b_
+            Ror_ a_ b_ -> fff i Ror_ a_ b_
+            Rcl_ a_ b_ -> fff i Rcl_ a_ b_
+            Rcr_ a_ b_ -> fff i Rcr_ a_ b_
+            Shl_ a_ b_ -> fff i Shl_ a_ b_
+            Shr_ a_ b_ -> fff i Shr_ a_ b_
+            Sar_ a_ b_ -> fff i Sar_ a_ b_
+            Mov_ a_ b_ -> fff i Mov_ a_ b_
 
       where
         mkVal :: IsSize s => Operand RW S64 -> Operand k s -> Gen (Int64, Code -> Code)
         mkVal _ o@(ImmOp (Immediate w)) = return (w, id)
         mkVal _ o@(RegOp x) = do
             v <- arbVal $ size o
-            return (v, (Mov (RegOp x) (imm v) <>))
+            return (v, (mov (RegOp x) (fromIntegral v) >>))
         mkVal helper x@(IPMemOp LabelRelValue{}) = do
             v <- arbVal $ size x
-            return (v, \c -> Scope $ Up jmp8 {- <> align (size x) -} <:> Data (toBytes v) <.> c)
+            return (v, \c -> mdo
+                        jmp l
+                        db $ toBytes v
+                        l <- label
+                        c)
         mkVal helper o@(MemOp (Addr (Just x) d i)) = do
             v <- arbVal $ size o
             (vi, setvi) <- case i of
-                NoIndex -> return (0, mempty)
+                NoIndex -> return (0, return ())
                 IndexReg sc i -> do
                     x <- arbVal $ size i
-                    return (scaleFactor sc * x, Mov (RegOp i) (imm x))
+                    return (scaleFactor sc * x, mov (RegOp i) (fromIntegral x))
             let
                 d' = (vi :: Int64) + case d of
                     NoDisp -> 0
                     Disp v -> fromIntegral v
                 rx = resizeOperand $ RegOp x :: Operand RW S64
-            return (v, ((leaData rx v <> Mov helper (imm d') <> Sub rx helper <> setvi) <>))
+            return (v, ((leaData rx v >> mov helper (fromIntegral d') >> sub rx helper >> setvi) >>))
         mkVal helper o@(MemOp (Addr Nothing d (Just (sc, x)))) = do
             v <- arbVal $ size o
             let
@@ -377,7 +395,7 @@ instance Arbitrary InstrTest where
                     NoDisp -> 0 :: Int64
                     Disp v -> fromIntegral v
                 rx = resizeOperand $ RegOp x :: Operand RW S64
-            return (v, ((leaData rx v <> Mov helper (imm d') <> Sub rx helper) <>))
+            return (v, ((leaData rx v >> mov helper (fromIntegral d') >> sub rx helper) >>))
 
 
 propInstr (IT _ c) = compile c :: Bool
