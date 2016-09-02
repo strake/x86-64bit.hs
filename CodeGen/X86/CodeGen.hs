@@ -232,6 +232,21 @@ withLabels :: Code -> LCode
 withLabels =
     snd . runWriter . flip evalStateT 0 . unCodeM
 
+-- multi-byte nop operations
+nops :: Int -> Bytes
+nops = \case
+    0 -> []
+    1 -> [0x90]
+    2 -> [0x66, 0x90]
+    3 -> [0x0f, 0x1f, 0x00]
+    4 -> [0x0f, 0x1f, 0x40, 0x00]
+    5 -> [0x0f, 0x1f, 0x44, 0x00, 0x00]
+    6 -> [0x66, 0x0f, 0x1f, 0x44, 0x00, 0x00]
+    7 -> [0x0f, 0x1f, 0x80, 0x00, 0x00, 0x00, 0x00]
+    8 -> [0x0f, 0x1f, 0x84, 0x00, 0x00, 0x00, 0x00, 0x00]
+    9 -> [0x66, 0x0f, 0x1f, 0x84, 0x00, 0x00, 0x00, 0x00, 0x00]
+    x -> nops 9 ++ nops (x-9)
+
 mkCodeBuilder' :: CodeLine -> CodeBuilder
 mkCodeBuilder' = \case
     Add_  a b -> op2 0x0 a b
@@ -365,7 +380,7 @@ mkCodeBuilder' = \case
             sendPast (ma + s-1, mls)
             ~(ma, mls) <- getFuture
             let n' = fromIntegral $ ((fromIntegral n - 1 :: Int64) .|. (fromIntegral s - 1)) + 1
-            return $ zip [n..] $ replicate (n' - n) 0x90
+            return $ zip [n..] $ nops $ n' - n
         tell $ Right <$> bs
 
   where
