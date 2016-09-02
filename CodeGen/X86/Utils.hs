@@ -36,10 +36,10 @@ doWhile cc x = do
 -- | if-then-else
 if_ cc a b = mdo
     j cc l1
-    a
+    b
     jmp l2
     l1 <- label
-    b
+    a
     l2 <- label
     return ()
 
