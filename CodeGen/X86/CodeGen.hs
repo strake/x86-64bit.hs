@@ -20,7 +20,7 @@ module CodeGen.X86.CodeGen where
 import Numeric
 import Data.Maybe
 import Data.Monoid
-import qualified Data.Vector as V
+import qualified Data.Vector.Unboxed as V
 import Data.Bits
 import Data.Int
 import Data.Word
@@ -179,6 +179,12 @@ mkAutoRef ss (Label l_) = CodeBuilder (minimum sizes) (maximum sizes) $ do
   where
     sizes = map (\(s, c) -> sizeLen s + length c) ss
 
+-- prebuild code
+preBuild :: Code -> Code
+preBuild c = CodeM $ tell $ Prebuilt (compactCode (buildCode lc)) lc
+  where
+    lc = withLabels c
+
 ------------------------------------------------------- code to code builder
 
 instance Show Code where
@@ -189,7 +195,7 @@ instance Show LCode where
       where
         ss = snd . runWriter . flip evalStateT 0 . showCode $ c
         (x, s) = buildCode c
-        bs = V.toList $ V.replicate s 0 V.// [p | Right p <- x]
+        bs = V.toList $ compactCode (x, s)
         is = [i | Left i <- x]
 
         showLine addr [] s = s
@@ -199,11 +205,9 @@ instance Show LCode where
 
         maxbytes = 12
 
-{-
-codeBytes c = Bytes $ V.toList $ V.replicate s 0 V.// [p | Right p <- x]
-  where
-    (x, s) = buildTheCode c
--}
+compactCode :: (CodeBuilderRes, Int) -> V.Vector Word8
+compactCode (x, s) = V.replicate s 0 V.// [p | Right p <- x]
+
 buildTheCode :: Code -> (CodeBuilderRes, Int)
 buildTheCode = buildCode . withLabels
 
@@ -215,7 +219,7 @@ buildCode x = (r, len)
 mkCodeBuilder :: LCode -> CodeBuilder
 mkCodeBuilder = \case
     CodeLine x _ -> x
-    Group x _ -> x
+    Prebuilt v _ -> mkCodeBuilder' (Align_ 4) <> codeBytes (V.toList v)
     AppendCode x _ _ -> x
     EmptyCode -> mempty
 
@@ -278,7 +282,6 @@ mkCodeBuilder' = \case
     Inc_  a -> op1 0x7f 0x0 a
     Dec_  a -> op1 0x7f 0x1 a
     Call_ a -> op1' 0xff 0x2 a
-    Jmpq_ a -> op1' 0xff 0x4 a
 
     Movd_ a@OpXMM b -> sse 0x6e a b
     Movd_ b a@OpXMM -> sse 0x7e a b
@@ -332,6 +335,9 @@ mkCodeBuilder' = \case
     Jmp_ (Just S8)  l -> codeByte 0xeb <> mkRef S8 1 l
     Jmp_ (Just S32) l -> codeByte 0xe9 <> mkRef S32 4 l
     Jmp_ Nothing    l -> mkAutoRef [(S8, [0xeb]), (S32, [0xe9])] l
+
+    Jmpq_ (ImmOp (LabelRelValue S32 l)) -> mkAutoRef [(S8, [0xeb]), (S32, [0xe9])] l
+    Jmpq_ a -> op1' 0xff 0x4 a
 
     Label_ -> CodeBuilder 0 0 $ do
         bs <- lift $ mdo
@@ -504,7 +510,7 @@ mkCodeBuilder' = \case
     op1 :: IsSize s => Word8 -> Word8 -> Operand r s -> CodeBuilder
     op1 a b c = op1_ a b c mempty
 
-    op1' :: Word8 -> Word8 -> Operand RW S64 -> CodeBuilder
+    op1' :: Word8 -> Word8 -> Operand r S64 -> CodeBuilder
     op1' r1 r2 dest = regprefix S32 dest (codeByte r1 <> reg8 r2 dest) mempty
 
     shiftOp :: IsSize s => Word8 -> Operand RW s -> Operand r S8 -> CodeBuilder
@@ -521,7 +527,7 @@ pattern OpXMM <- RegOp XMM{}
 -------------------------------------------------------------- asm codes
 
 data LCode where
-    Group       :: CodeBuilder -> LCode -> LCode
+    Prebuilt    :: V.Vector Word8 -> LCode -> LCode
     EmptyCode   :: LCode
     AppendCode  :: CodeBuilder -> LCode -> LCode -> LCode
     CodeLine    :: CodeBuilder -> CodeLine -> LCode
@@ -616,6 +622,6 @@ tellAddr = CodeBuilder 0 0 $ do
 showCode = \case
     EmptyCode  -> return ()
     AppendCode _ a b -> showCode a >> showCode b
-    Group _ c -> codeLine "{" >> showCode c >> codeLine "}"
+    Prebuilt _ c -> showCodeLine (Align_ 4) >> codeLine "{" >> showCode c >> codeLine "}"
     CodeLine _ x -> showCodeLine x
 

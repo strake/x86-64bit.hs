@@ -33,6 +33,7 @@ module CodeGen.X86
     , Access (..)
     , Operand
     , resizeOperand
+    , ipRelValue
     -- * Conditions
     , Condition
     , pattern O
@@ -135,6 +136,7 @@ module CodeGen.X86
     -- * Compilation
     , Callable
     , compile
+    , preBuild
     -- * Calling convention
     , saveNonVolatile
     , arg1, arg2, arg3, arg4

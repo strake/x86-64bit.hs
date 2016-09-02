@@ -226,6 +226,8 @@ pattern IndexReg a b = Just (a, b)
 ipRel :: Label -> Operand rw s
 ipRel l = IPMemOp $ LabelRelValue S32 l
 
+ipRelValue l = ImmOp $ LabelRelValue S32 l
+
 -- | `ipRel` with specialized type
 ipRel8 :: Label -> Operand rw S8
 ipRel8 = ipRel
@@ -552,8 +554,8 @@ data CodeLine where
     Pop_  :: Operand RW S64 -> CodeLine
     Push_ :: Operand r  S64 -> CodeLine
 
-    Call_ :: Operand RW S64 -> CodeLine
-    Jmpq_ :: Operand RW S64 -> CodeLine
+    Call_ :: Operand r S64 -> CodeLine
+    Jmpq_ :: Operand r S64 -> CodeLine
 
     J_    :: Condition -> Maybe Size -> Label -> CodeLine
     Jmp_  :: Maybe Size -> Label -> CodeLine
