@@ -1,3 +1,12 @@
+# Version 0.3.1
+
+-   use multi-byte nop operations for padding
+-   `preBuild` operation (may speed up code generation)
+-   branch-predicition friendlier if-then-else
+-   not-condition pattern: `N`  
+    usage example: `j (N E)` which is the same as `j NE`
+-   bugfix: fix if-then-else condition
+
 # Version 0.3
 
 -   simpler API for label handling  
