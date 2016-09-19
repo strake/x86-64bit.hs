@@ -296,6 +296,8 @@ mkCodeBuilder' = \case
     Neg_  a -> op1 0x7b 0x3 a
     Inc_  a -> op1 0x7f 0x0 a
     Dec_  a -> op1 0x7f 0x1 a
+
+    Call_ (ImmOp (LabelRelValue S32 l)) -> codeByte 0xe8 <> mkRef S32 4 l
     Call_ a -> op1' 0xff 0x2 a
 
     Movd_ a@OpXMM b -> sse 0x6e a b
