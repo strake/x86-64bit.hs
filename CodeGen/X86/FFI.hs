@@ -49,6 +49,9 @@ foreign import ccall "dynamic" callWord64_Word64    :: FunPtr (Word64 -> Word64)
 foreign import ccall "dynamic" callPtr_Word64       :: FunPtr (Ptr a -> Word64)     -> Ptr a -> Word64
 foreign import ccall "dynamic" callPtr_Word         :: FunPtr (Ptr a -> Word)       -> Ptr a -> Word
 foreign import ccall "dynamic" callPtr_Int64        :: FunPtr (Ptr a -> Int64)      -> Ptr a -> Int64
+foreign import ccall "dynamic" callPtr_Int32        :: FunPtr (Ptr a -> Int32)      -> Ptr a -> Int32
+foreign import ccall "dynamic" callPtr_Int16        :: FunPtr (Ptr a -> Int16)      -> Ptr a -> Int16
+foreign import ccall "dynamic" callPtr_Int8         :: FunPtr (Ptr a -> Int8)       -> Ptr a -> Int8
 foreign import ccall "dynamic" callPtr_Int          :: FunPtr (Ptr a -> Int)        -> Ptr a -> Int
 
 unsafeCallForeignPtr0 call p = unsafePerformIO $ evaluate (call (castPtrToFunPtr $ unsafeForeignPtrToPtr p)) <* touchForeignPtr p
@@ -76,6 +79,9 @@ instance Callable (Word64 -> Word64)    where unsafeCallForeignPtr = unsafeCallF
 instance Callable (Ptr a -> Word64)     where unsafeCallForeignPtr = unsafeCallForeignPtr1 callPtr_Word64
 instance Callable (Ptr a -> Word)       where unsafeCallForeignPtr = unsafeCallForeignPtr1 callPtr_Word
 instance Callable (Ptr a -> Int64)      where unsafeCallForeignPtr = unsafeCallForeignPtr1 callPtr_Int64
+instance Callable (Ptr a -> Int32)      where unsafeCallForeignPtr = unsafeCallForeignPtr1 callPtr_Int32
+instance Callable (Ptr a -> Int16)      where unsafeCallForeignPtr = unsafeCallForeignPtr1 callPtr_Int16
+instance Callable (Ptr a -> Int8)       where unsafeCallForeignPtr = unsafeCallForeignPtr1 callPtr_Int8
 instance Callable (Ptr a -> Int)        where unsafeCallForeignPtr = unsafeCallForeignPtr1 callPtr_Int
 
 -------------------------------------------------------
