@@ -169,7 +169,7 @@ mkAutoRef ss (Label l_) = CodeBuilder (minimum sizes) (maximum sizes) $ do
             vx' = ma - ma'
             (z', s) = g' ss
             g' [] = error $ show vx' ++ " does not fit into auto size"
-            g' ((s, c): ss) = case (s, vx' - length c - sizeLen s) of
+            g' ((s, c): ss) = case (s, vx') of
                 (S8,  Integral (j :: Int8)) -> (c, s)
                 (S32, Integral (j :: Int32)) -> (c, s)
                 _ -> g' ss
