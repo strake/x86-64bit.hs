@@ -1,8 +1,21 @@
+{-# LANGUAGE FlexibleInstances #-}
 module CodeGen.X86.Examples where
 
 import Foreign
 
 import CodeGen.X86
+
+foreign import ccall "dynamic" callWW :: FunPtr (Word64 -> Word64) -> Word64 -> Word64
+instance Callable (Word64 -> Word64) where dynCCall = callWW
+
+foreign import ccall "dynamic" callPW :: FunPtr (Ptr a -> Word64) -> Ptr a -> Word64
+instance Callable (Ptr a -> Word64) where dynCCall = callPW
+
+foreign import ccall "dynamic" callIO :: FunPtr (IO ()) -> IO ()
+instance Callable (IO ()) where dynCCall = callIO
+
+foreign import ccall "wrapper" createPtrWord64_Word64 :: (Word64 -> Word64) -> IO (FunPtr (Word64 -> Word64))
+instance CallableHs (Word64 -> Word64) where createHsPtr = createPtrWord64_Word64
 
 ------------------------------------------------------------------------------ 
 -- * examples
@@ -84,6 +97,6 @@ memTestFun v = do
     let code = saveNonVolatile $ do
             mov rdi arg1
             mov rax (addr rdi)
-    return $ compile code r == v
+    return $ compile code (r :: Ptr Word8) == v
 
 

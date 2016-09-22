@@ -1,3 +1,10 @@
+# Version 0.4
+
+-   rewrite FFI
+-   support calling labels
+-   speed up long code alignments
+-   bugfix: auto size calculation fix
+
 # Version 0.3.1
 
 -   use multi-byte nop operations for padding

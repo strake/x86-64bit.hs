@@ -33,6 +33,11 @@ import CodeGen.X86.CodeGen
 import CodeGen.X86.FFI
 import CodeGen.X86.Utils
 
+import Foreign
+
+foreign import ccall "dynamic" dcb :: FunPtr Bool -> Bool
+instance Callable Bool where dynCCall = dcb
+
 ------------------------------------------------------------------------------
 
 class HasSigned a where

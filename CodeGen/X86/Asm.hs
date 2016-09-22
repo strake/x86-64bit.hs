@@ -300,6 +300,7 @@ instance IsSize s => HasSize (IndexReg s) where
 instance (rw ~ R) => Num (Operand rw s) where
     negate (ImmOp (Immediate x)) = ImmOp $ Immediate $ negate x
     fromInteger (Integral x) = ImmOp $ Immediate x
+    fromInteger z = error $ show z ++ " does not fit into " -- ++ show s
     (+) = error "(+) @Operand"
     (-) = error "(-) @Operand"
     (*) = error "(*) @Operand"

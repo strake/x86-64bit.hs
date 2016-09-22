@@ -135,7 +135,6 @@ module CodeGen.X86
     , leaData
     , traceReg
     -- * Compilation
-    , Callable
     , compile
     , preBuild
     -- * Calling convention
@@ -143,9 +142,10 @@ module CodeGen.X86
     , arg1, arg2, arg3, arg4
     , result
     -- * Calling C and Haskell from Assembly
+    , Callable (..)
+    , CallableHs (..)
     , callFun
     , printf
-    , CallableHs
     , hsPtr
     , CString (..)
     -- * Misc

@@ -3,6 +3,7 @@
 {-# language BangPatterns #-}
 {-# language ViewPatterns #-}
 {-# language FlexibleInstances #-}
+{-# language TypeFamilies #-}
 module CodeGen.X86.FFI where
 
 -------------------------------------------------------
@@ -15,6 +16,7 @@ import Foreign.ForeignPtr
 import Foreign.ForeignPtr.Unsafe
 import System.IO.Unsafe
 
+import Control.DeeperSeq
 import CodeGen.X86.Asm
 import CodeGen.X86.CodeGen
 
@@ -31,60 +33,21 @@ import Foreign.Marshal.Alloc
 
 #endif
 
--------------------------------------------------------
+class MapResult a => Callable a where dynCCall :: FunPtr a -> a
 
-foreign import ccall "dynamic" callWord64           :: FunPtr Word64                -> Word64
-foreign import ccall "dynamic" callWord32           :: FunPtr Word32                -> Word32
-foreign import ccall "dynamic" callWord16           :: FunPtr Word16                -> Word16
-foreign import ccall "dynamic" callWord8            :: FunPtr Word8                 -> Word8
-foreign import ccall "dynamic" callWord             :: FunPtr Word                  -> Word
-foreign import ccall "dynamic" callInt64            :: FunPtr Int64                 -> Int64
-foreign import ccall "dynamic" callInt32            :: FunPtr Int32                 -> Int32
-foreign import ccall "dynamic" callInt16            :: FunPtr Int16                 -> Int16
-foreign import ccall "dynamic" callInt8             :: FunPtr Int8                  -> Int8
-foreign import ccall "dynamic" callInt              :: FunPtr Int                   -> Int
-foreign import ccall "dynamic" callBool             :: FunPtr Bool                  -> Bool
-foreign import ccall "dynamic" callIOUnit           :: FunPtr (IO ())               -> IO ()
-foreign import ccall "dynamic" callWord64_Word64    :: FunPtr (Word64 -> Word64)    -> Word64 -> Word64
-foreign import ccall "dynamic" callPtr_Word64       :: FunPtr (Ptr a -> Word64)     -> Ptr a -> Word64
-foreign import ccall "dynamic" callPtr_Word         :: FunPtr (Ptr a -> Word)       -> Ptr a -> Word
-foreign import ccall "dynamic" callPtr_Int64        :: FunPtr (Ptr a -> Int64)      -> Ptr a -> Int64
-foreign import ccall "dynamic" callPtr_Int32        :: FunPtr (Ptr a -> Int32)      -> Ptr a -> Int32
-foreign import ccall "dynamic" callPtr_Int16        :: FunPtr (Ptr a -> Int16)      -> Ptr a -> Int16
-foreign import ccall "dynamic" callPtr_Int8         :: FunPtr (Ptr a -> Int8)       -> Ptr a -> Int8
-foreign import ccall "dynamic" callPtr_Int          :: FunPtr (Ptr a -> Int)        -> Ptr a -> Int
+callForeignPtr :: Callable a => ForeignPtr a -> a
+callForeignPtr p = deeperSeq (unsafePerformIO $ touchForeignPtr p) (dynCCall $ castPtrToFunPtr $ unsafeForeignPtrToPtr p)
 
-unsafeCallForeignPtr0 call p = unsafePerformIO $ evaluate (call (castPtrToFunPtr $ unsafeForeignPtrToPtr p)) <* touchForeignPtr p
+class MapResult a => CallableHs a where createHsPtr :: a -> IO (FunPtr a)
 
-unsafeCallForeignPtr1 call p a = unsafePerformIO $ evaluate (call (castPtrToFunPtr $ unsafeForeignPtrToPtr p) a) <* touchForeignPtr p
-
-unsafeCallForeignPtrIO0 call p = call (castPtrToFunPtr $ unsafeForeignPtrToPtr p) <* touchForeignPtr p
-
-
-class Callable a where unsafeCallForeignPtr :: ForeignPtr a -> a
-
-instance Callable Word64                where unsafeCallForeignPtr = unsafeCallForeignPtr0 callWord64
-instance Callable Word32                where unsafeCallForeignPtr = unsafeCallForeignPtr0 callWord32
-instance Callable Word16                where unsafeCallForeignPtr = unsafeCallForeignPtr0 callWord16
-instance Callable Word8                 where unsafeCallForeignPtr = unsafeCallForeignPtr0 callWord8
-instance Callable Word                  where unsafeCallForeignPtr = unsafeCallForeignPtr0 callWord
-instance Callable Int64                 where unsafeCallForeignPtr = unsafeCallForeignPtr0 callInt64
-instance Callable Int32                 where unsafeCallForeignPtr = unsafeCallForeignPtr0 callInt32
-instance Callable Int16                 where unsafeCallForeignPtr = unsafeCallForeignPtr0 callInt16
-instance Callable Int8                  where unsafeCallForeignPtr = unsafeCallForeignPtr0 callInt8
-instance Callable Int                   where unsafeCallForeignPtr = unsafeCallForeignPtr0 callInt
-instance Callable Bool                  where unsafeCallForeignPtr = unsafeCallForeignPtr0 callBool
-instance Callable (IO ())               where unsafeCallForeignPtr = unsafeCallForeignPtrIO0 callIOUnit
-instance Callable (Word64 -> Word64)    where unsafeCallForeignPtr = unsafeCallForeignPtr1 callWord64_Word64
-instance Callable (Ptr a -> Word64)     where unsafeCallForeignPtr = unsafeCallForeignPtr1 callPtr_Word64
-instance Callable (Ptr a -> Word)       where unsafeCallForeignPtr = unsafeCallForeignPtr1 callPtr_Word
-instance Callable (Ptr a -> Int64)      where unsafeCallForeignPtr = unsafeCallForeignPtr1 callPtr_Int64
-instance Callable (Ptr a -> Int32)      where unsafeCallForeignPtr = unsafeCallForeignPtr1 callPtr_Int32
-instance Callable (Ptr a -> Int16)      where unsafeCallForeignPtr = unsafeCallForeignPtr1 callPtr_Int16
-instance Callable (Ptr a -> Int8)       where unsafeCallForeignPtr = unsafeCallForeignPtr1 callPtr_Int8
-instance Callable (Ptr a -> Int)        where unsafeCallForeignPtr = unsafeCallForeignPtr1 callPtr_Int
-
--------------------------------------------------------
+hsPtr :: CallableHs a => a -> FunPtr a
+hsPtr x = unsafePerformIO $ createHsPtr x
+{- TODO
+hsPtr' :: CallableHs a => a -> ForeignPtr a
+hsPtr' x = unsafePerformIO $ do
+    p <- createHsPtr x
+    newForeignPtr (freeHaskellFunPtr p) (castFunPtrToPtr p)
+-}
 
 #if defined (mingw32_HOST_OS) || defined (mingw64_HOST_OS) 
 -- note: GHC 64 bit also defines mingw32 ...
@@ -117,7 +80,7 @@ flag_PAGE_EXECUTE_READWRITE = 0x40
 
 {-# NOINLINE compile #-}
 compile :: Callable a => Code -> a
-compile x = unsafeCallForeignPtr $ unsafePerformIO $ do
+compile x = callForeignPtr $ unsafePerformIO $ do
     let (bytes, fromIntegral -> size) = buildTheCode x
     arr <- c_aligned_malloc (fromIntegral size) PAGE_SIZE
     _ <- virtualProtect (castPtr arr) (fromIntegral size) flag_PAGE_EXECUTE_READWRITE
@@ -128,7 +91,7 @@ compile x = unsafeCallForeignPtr $ unsafePerformIO $ do
 
 {-# NOINLINE compile #-}
 compile :: Callable a => Code -> a
-compile x = unsafeCallForeignPtr $ unsafePerformIO $ do
+compile x = callForeignPtr $ unsafePerformIO $ do
     let (bytes, fromIntegral -> size) = buildTheCode x
     arr <- memalign PAGE_SIZE size
     _ <- mprotect arr size 0x7 -- READ, WRITE, EXEC
@@ -153,7 +116,7 @@ posixMemAlign alignment size0 =
       
 {-# NOINLINE compile #-}
 compile :: Callable a => Code -> a
-compile x = unsafeCallForeignPtr $ unsafePerformIO $ do
+compile x = callForeignPtr $ unsafePerformIO $ do
     let (bytes, fromIntegral -> size) = buildTheCode x
     arr <- posixMemAlign PAGE_SIZE size
     _ <- mprotect arr size 0x7 -- READ, WRITE, EXEC
@@ -161,16 +124,4 @@ compile x = unsafeCallForeignPtr $ unsafePerformIO $ do
     newForeignPtr stdfree arr
 
 #endif
-
--------------------------------------------------------
-
-foreign import ccall "wrapper" createPtrWord64_Word64 :: (Word64 -> Word64) -> IO (FunPtr (Word64 -> Word64))
-
-class CallableHs a where createHsPtr :: a -> IO (FunPtr a)
-
-instance CallableHs (Word64 -> Word64) where createHsPtr = createPtrWord64_Word64
-
-hsPtr :: CallableHs a => a -> FunPtr a
-hsPtr x = unsafePerformIO $ createHsPtr x
-
 

@@ -1,5 +1,5 @@
 name:                x86-64bit
-version:             0.3.1
+version:             0.4
 homepage:            https://github.com/divipp/x86-64
 synopsis:            Runtime code generation for x86 64 bit machine code
 description:         The primary goal of x86-64bit is to provide a lightweight assembler for machine generated 64 bit x86 assembly instructions. See README.md for further details.
@@ -25,6 +25,7 @@ library
     CodeGen.X86
     CodeGen.X86.Examples
   other-modules:
+    Control.DeeperSeq
     CodeGen.X86.Asm
     CodeGen.X86.CodeGen
     CodeGen.X86.CallConv
@@ -59,7 +60,8 @@ library
     monads-tf >=0.1 && <0.2,
     tardis >= 0.4 && <0.5,
     vector >=0.11 && <0.12,
-    QuickCheck >=2.8 && <2.10
+    QuickCheck >=2.8 && <2.10,
+    deepseq
 
   if os(windows)
     build-depends: Win32
@@ -75,7 +77,8 @@ test-suite test-x86-64bit
     monads-tf >=0.1 && <0.2,
     tardis >= 0.4 && <0.5,
     vector >=0.11 && <0.12,
-    QuickCheck >=2.8 && <2.10
+    QuickCheck >=2.8 && <2.10,
+    deepseq
 
   if os(windows)
     build-depends: Win32
