@@ -3,6 +3,7 @@
 {-# language BangPatterns #-}
 {-# language ViewPatterns #-}
 {-# language FlexibleInstances #-}
+{-# language FlexibleContexts #-}
 {-# language TypeFamilies #-}
 module CodeGen.X86.FFI where
 
@@ -10,6 +11,7 @@ module CodeGen.X86.FFI where
 
 import Control.Monad
 import Control.Exception (evaluate)
+import Control.DeepSeq
 import Foreign
 import Foreign.C.Types
 import Foreign.ForeignPtr
@@ -33,10 +35,15 @@ import Foreign.Marshal.Alloc
 
 #endif
 
-class MapResult a => Callable a where dynCCall :: FunPtr a -> a
+class (MapResult a, NFData (Result a)) => Callable a where dynCCall :: FunPtr a -> a
 
-callForeignPtr :: Callable a => ForeignPtr a -> a
-callForeignPtr p = deeperSeq (unsafePerformIO $ touchForeignPtr p) (dynCCall $ castPtrToFunPtr $ unsafeForeignPtrToPtr p)
+{-# NOINLINE callForeignPtr #-}
+callForeignPtr :: Callable a => IO (ForeignPtr a) -> a
+callForeignPtr p_ = mapResult f (dynCCall $ castPtrToFunPtr $ unsafeForeignPtrToPtr p)
+  where
+    p = unsafePerformIO p_
+    {-# NOINLINE f #-}
+    f x = unsafePerformIO $ evaluate (force x) <* touchForeignPtr p
 
 class MapResult a => CallableHs a where createHsPtr :: a -> IO (FunPtr a)
 
@@ -80,7 +87,7 @@ flag_PAGE_EXECUTE_READWRITE = 0x40
 
 {-# NOINLINE compile #-}
 compile :: Callable a => Code -> a
-compile x = callForeignPtr $ unsafePerformIO $ do
+compile x = callForeignPtr $ do
     let (bytes, fromIntegral -> size) = buildTheCode x
     arr <- c_aligned_malloc (fromIntegral size) PAGE_SIZE
     _ <- virtualProtect (castPtr arr) (fromIntegral size) flag_PAGE_EXECUTE_READWRITE
@@ -91,7 +98,7 @@ compile x = callForeignPtr $ unsafePerformIO $ do
 
 {-# NOINLINE compile #-}
 compile :: Callable a => Code -> a
-compile x = callForeignPtr $ unsafePerformIO $ do
+compile x = callForeignPtr $ do
     let (bytes, fromIntegral -> size) = buildTheCode x
     arr <- memalign PAGE_SIZE size
     _ <- mprotect arr size 0x7 -- READ, WRITE, EXEC
@@ -116,7 +123,7 @@ posixMemAlign alignment size0 =
       
 {-# NOINLINE compile #-}
 compile :: Callable a => Code -> a
-compile x = callForeignPtr $ unsafePerformIO $ do
+compile x = callForeignPtr $ do
     let (bytes, fromIntegral -> size) = buildTheCode x
     arr <- posixMemAlign PAGE_SIZE size
     _ <- mprotect arr size 0x7 -- READ, WRITE, EXEC
