@@ -20,7 +20,7 @@ import CodeGen.X86.CodeGen
 callFun :: Operand RW S64 -> FunPtr a -> Code
 callFun r p = do
     sub rsp 32
-    mov r (imm $ ptrToIntPtr $ castFunPtrToPtr p)
+    mov r (fromIntegral $ ptrToIntPtr $ castFunPtrToPtr p)
     call r
     add rsp 32
 
@@ -31,10 +31,10 @@ callFun :: Operand RW S64 -> FunPtr a -> Code
 callFun r p = do
     push r15              -- we will use r15 (non-volatile) to store old rsp
     mov r15 15            -- 0xf
-    not r15               -- 0xffff ... fff0
-    and r15 rsp           -- align rsp into r15
+    not_ r15              -- 0xffff ... fff0
+    and_ r15 rsp          -- align rsp into r15
     xchg r15 rsp          -- new rsp = aligned, r15 = old rsp
-    mov r (imm $ ptrToIntPtr $ castFunPtrToPtr p)
+    mov r (fromIntegral $ ptrToIntPtr $ castFunPtrToPtr p)
     call r
     mov rsp r15           -- restore rsp
     pop r15               -- restore r15
