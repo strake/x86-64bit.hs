@@ -1,3 +1,7 @@
+# Version 0.4.4
+
+-   export some useful data types 
+
 # Version 0.4.3
 
 -   fixes to compile on GHC 7.10 and on Windows
