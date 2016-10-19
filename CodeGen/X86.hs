@@ -9,6 +9,7 @@ module CodeGen.X86
     , HasSize (..)
     , IsSize
     -- * Registers
+    , Reg , FromReg (..)
     -- ** 64 bit registers
     , rax, rcx, rdx, rbx, rsp, rbp, rsi, rdi, r8, r9, r10, r11, r12, r13, r14, r15
     -- ** 32 bit registers
@@ -22,6 +23,7 @@ module CodeGen.X86
     -- ** SSE registers
     , xmm0, xmm1, xmm2, xmm3, xmm4, xmm5, xmm6, xmm7
     -- * Addresses
+    , Addr (..), BaseReg, IndexReg, Scale, Displacement, Address
     , addr
     , addr8
     , addr16
@@ -31,7 +33,7 @@ module CodeGen.X86
     , ipRel8
     -- * Operands
     , Access (..)
-    , Operand
+    , Operand (..)
     , resizeOperand
     , ipRelValue
     -- * Conditions
