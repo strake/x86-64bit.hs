@@ -1,3 +1,7 @@
+# Version 0.4.2
+
+-   fix OSX compilation
+
 # Version 0.4.1
 
 -   fix a bug which caused segmentation fault if a compiled function was called multiple times
