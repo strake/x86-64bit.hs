@@ -62,6 +62,7 @@ instance HasBytes Int64 where toBytes w = toBytes (fromIntegral w :: Word64)
 
 ------------------------------------------------------- sizes
 
+-- | The size of a register (in bits)
 data Size = S8 | S16 | S32 | S64 | S128
     deriving (Eq, Ord)
 
@@ -135,7 +136,7 @@ sizeEqCheck _ _ = case (ssize :: SSize s, ssize :: SSize s') of
 
 ------------------------------------------------------- scale
 
--- replace with Size?
+-- | The scaling of an index. (replace with Size?)
 newtype Scale = Scale Word8
     deriving (Eq)
 
@@ -158,6 +159,7 @@ scaleFactor (Scale i) = case i of
 
 ------------------------------------------------------- operand
 
+-- | An operand can be an immediate, a register, a memory address or RIP-relative (memory address relative to the instruction pointer)
 data Operand :: Access -> Size -> * where
     ImmOp     :: Immediate Int64 -> Operand R s
     RegOp     :: Reg s -> Operand rw s
@@ -198,19 +200,24 @@ data Access
     = R     -- ^ readable operand
     | RW    -- ^ readable and writeable operand
 
+-- | A register.
 data Reg :: Size -> * where
-    NormalReg :: Word8 -> Reg s
-    HighReg   :: Word8 -> Reg S8
-    XMM       :: Word8 -> Reg S128
+    NormalReg :: Word8 -> Reg s      -- \"normal\" registers are for example @AL@, @BX@, @ECX@ or @RSI@
+    HighReg   :: Word8 -> Reg S8     -- \"high\" registers are @AH@, @BH@, @CH@ etc
+    XMM       :: Word8 -> Reg S128   -- XMM registers
 
 deriving instance Eq (Reg s)
 deriving instance Ord (Reg s)
 
+-- | A (relative) address is made up base a base register, a displacement, and a (scaled) index.
+-- For example in @[eax+4*ecx+20]@ the base register is @eax@, the displacement is @20@ and the
+-- index is @4*ecx@.
 data Addr s = Addr
     { baseReg        :: BaseReg s
     , displacement   :: Displacement
     , indexReg       :: IndexReg s
     }
+    deriving (Eq)
 
 type BaseReg s    = Maybe (Reg s)
 type IndexReg s   = Maybe (Scale, Reg s)
@@ -222,7 +229,7 @@ pattern Disp a = Just a
 pattern NoIndex = Nothing
 pattern IndexReg a b = Just (a, b)
 
--- | intruction pointer relative address
+-- | intruction pointer (RIP) relative address
 ipRel :: Label -> Operand rw s
 ipRel l = IPMemOp $ LabelRelValue S32 l
 
