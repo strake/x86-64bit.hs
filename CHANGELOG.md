@@ -1,3 +1,7 @@
+# Version 0.4.3
+
+-   fixes to compile on GHC 7.10 and on Windows
+
 # Version 0.4.2
 
 -   fix OSX compilation
