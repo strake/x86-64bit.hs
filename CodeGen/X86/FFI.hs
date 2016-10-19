@@ -39,8 +39,9 @@ class (MapResult a, NFData (Result a)) => Callable a where dynCCall :: FunPtr a 
 
 {-# NOINLINE callForeignPtr #-}
 callForeignPtr :: Callable a => IO (ForeignPtr a) -> a
-callForeignPtr p_ = mapResult f (dynCCall $ castPtrToFunPtr $ unsafeForeignPtrToPtr p)
+callForeignPtr p_ = mapResult f (dynCCall $ cast $ unsafeForeignPtrToPtr p)
   where
+    cast = castPtrToFunPtr :: Ptr a -> FunPtr a
     p = unsafePerformIO p_
     {-# NOINLINE f #-}
     f x = unsafePerformIO $ evaluate (force x) <* touchForeignPtr p
@@ -88,7 +89,7 @@ flag_PAGE_EXECUTE_READWRITE = 0x40
 {-# NOINLINE compile #-}
 compile :: Callable a => Code -> a
 compile x = callForeignPtr $ do
-    let (bytes, fromIntegral -> size) = buildTheCode x
+    let (bytes, size) = buildTheCode x
     arr <- c_aligned_malloc (fromIntegral size) PAGE_SIZE
     _ <- virtualProtect (castPtr arr) (fromIntegral size) flag_PAGE_EXECUTE_READWRITE
     forM_ [p | Right p <- bytes] $ uncurry $ pokeByteOff arr    
