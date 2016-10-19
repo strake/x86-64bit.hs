@@ -138,7 +138,7 @@ module CodeGen.X86
     , compile
     , preBuild
     -- * Calling convention
-    , saveNonVolatile
+    , saveNonVolatile, saveR12R15
     , arg1, arg2, arg3, arg4
     , result
     -- * Calling C and Haskell from Assembly
