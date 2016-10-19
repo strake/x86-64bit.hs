@@ -12,7 +12,7 @@ type family Result a where
 type family SetResult a b where
     SetResult x (IO a)   = IO (SetResult x a)
     SetResult x (b -> a) = b -> SetResult x a
-    SetResult x _        = x
+    SetResult x y        = x
 
 class (SetResult (Result a) a ~ a) => MapResult a where
     mapResult :: (Result a -> b) -> a -> SetResult b a

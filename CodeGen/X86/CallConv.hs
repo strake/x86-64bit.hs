@@ -51,13 +51,29 @@ callFun r p = do
 
 ------------------------------------------------------------------------------ 
 
--- | Save the non-volatile registers 
+-- | Save the non-volatile registers, execute the code, restore the registers 
+-- and return after.
 --
--- Note: R12..R15 should be preserved on both Windows and Linux.
--- This is the responsability of the user (this won't save them).
+-- Note: R12..R15 should be preserved on both Windows and Linux (or 
+-- System V convention in general). This is the responsability of the 
+-- user (this function won't save them, but you can use "saveR12R15" in 
+-- addition to this).
 --
 saveNonVolatile :: Code -> Code
 saveNonVolatile code = prologue >> code >> epilogue >> ret
+
+-- | Saves R12, R13, R14 and R15 (on the stack).
+saveR12R15 :: Code -> Code
+saveR12R15 code = do
+  push r12
+  push r13
+  push r14
+  push r15
+  code
+  pop r15
+  pop r14
+  pop r13
+  pop r12
 
 ------------------------------------------------------------------------------ 
 -- calling conventions
