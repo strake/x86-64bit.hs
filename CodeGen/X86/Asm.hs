@@ -553,7 +553,7 @@ notCond (Condition c) = Condition $ c `xor` 1
 data CodeLine where
     Ret_, Nop_, PushF_, PopF_, Cmc_, Clc_, Stc_, Cli_, Sti_, Cld_, Std_   :: CodeLine
 
-    Inc_, Dec_, Not_, Neg_                                :: IsSize s => Operand RW s -> CodeLine
+    Inc_, Dec_, Not_, Neg_, Bswap                               :: IsSize s => Operand RW s -> CodeLine
     Add_, Or_, Adc_, Sbb_, And_, Sub_, Xor_, Cmp_, Test_, Mov_  :: IsSize s => Operand RW s -> Operand r s -> CodeLine
     Rol_, Ror_, Rcl_, Rcr_, Shl_, Shr_, Sar_                 :: IsSize s => Operand RW s -> Operand r S8 -> CodeLine
 
@@ -641,6 +641,7 @@ showCodeLine = \case
     Dec_  op -> showOp1 "dec"  op
     Not_  op -> showOp1 "not"  op
     Neg_  op -> showOp1 "neg"  op
+    Bswap op -> showOp1 "bswap" op
     Pop_  op -> showOp1 "pop"  op
     Push_ op -> showOp1 "push" op
     Call_ op -> showOp1 "call" op

@@ -297,6 +297,8 @@ mkCodeBuilder' = \case
     Neg_  a -> op1 0x7b 0x3 a
     Inc_  a -> op1 0x7f 0x0 a
     Dec_  a -> op1 0x7f 0x1 a
+    Bswap a@RegOp{} | size a >= S32 -> op1 0x07 0x1 a
+    Bswap a  -> error $ "wrong bswap operand: " ++ show a
 
     Call_ (ImmOp (LabelRelValue S32 l)) -> codeByte 0xe8 <> mkRef S32 4 l
     Call_ a -> op1' 0xff 0x2 a
@@ -569,6 +571,7 @@ inc a   = mkCodeLine (Inc_ a)
 dec a   = mkCodeLine (Dec_ a)
 not_ a  = mkCodeLine (Not_ a)
 neg a   = mkCodeLine (Neg_ a)
+bswap a = mkCodeLine (Bswap a)
 add a b = mkCodeLine (Add_ a b)
 or_  a b = mkCodeLine (Or_  a b)
 adc a b = mkCodeLine (Adc_ a b)
