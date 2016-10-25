@@ -280,7 +280,7 @@ mkCodeBuilder' = \case
       where
         (dest', src') = if isMemOp src then (src, dest) else (dest, src)
 
-    Mov_ dest@(RegOp r) ((if size dest == S64 then mkImm S32 <> mkImmS S32 <> mkImmS S64 else mkImmS (size dest)) -> FJust ((se, si), im))
+    Mov_ dest@(RegOp r) ((if size dest == S64 then mkImm S32 <> mkImmS S64 else mkImm (size dest)) -> FJust ((se, si), im))
         | (se, si, size dest) /= (True, S32, S64) -> regprefix si dest (oneReg (0x16 .|. indicator (size dest /= S8)) r) im
         | otherwise -> regprefix'' dest 0x63 (reg8 0x0 dest) im
     Mov_ dest@(size -> s) (mkImmNo64 s -> FJust (_, im)) -> regprefix'' dest 0x63 (reg8 0x0 dest) im
@@ -394,9 +394,10 @@ mkCodeBuilder' = \case
     convertImm True b (ImmOp (LabelRelValue s d)) | b == s = FJust $ (,) (True, b) $ mkRef s (sizeLen s) d
     convertImm _ _ _ = FNothing
 
-    mkImmS, mkImm, mkImmNo64 :: Size -> Operand r s -> First ((Bool, Size), CodeBuilder)
+    mkImmS, mkImmU, mkImm, mkImmNo64 :: Size -> Operand r s -> First ((Bool, Size), CodeBuilder)
     mkImmS = convertImm True
-    mkImm  = convertImm False
+    mkImmU = convertImm False
+    mkImm s = mkImmS s <> mkImmU s
     mkImmNo64 s = mkImmS (no64 s)
 
     xchg_a :: IsSize s => Operand r s -> CodeBuilder
@@ -468,7 +469,7 @@ mkCodeBuilder' = \case
     sse op a@OpXMM b = regprefix S128 b (codeByte 0x0f <> codeByte op <> reg2x8 a b) mempty
 
     sseShift :: Word8 -> Word8 -> Word8 -> Operand RW S128 -> Operand r S8 -> CodeBuilder
-    sseShift op x op' a@OpXMM b@(mkImm S8 -> FJust (_, i)) = regprefix S128 b (codeByte 0x0f <> codeByte op <> reg8 x a) i
+    sseShift op x op' a@OpXMM b@(mkImmU S8 -> FJust (_, i)) = regprefix S128 b (codeByte 0x0f <> codeByte op <> reg8 x a) i
     -- TODO: xmm argument
 
     extension :: HasSize a => a -> Word8 -> CodeBuilder
@@ -535,7 +536,7 @@ mkCodeBuilder' = \case
 
     shiftOp :: IsSize s => Word8 -> Operand RW s -> Operand r S8 -> CodeBuilder
     shiftOp c dest (ImmOp (Immediate 1)) = op1 0x68 c dest
-    shiftOp c dest (mkImm S8 -> FJust (_, i)) = op1_ 0x60 c dest i
+    shiftOp c dest (mkImmU S8 -> FJust (_, i)) = op1_ 0x60 c dest i
     shiftOp c dest RegCl = op1 0x69 c dest
     shiftOp _ _ _ = error "invalid shift operands"
 
