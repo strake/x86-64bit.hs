@@ -86,6 +86,8 @@ module CodeGen.X86
     , not_
     , neg
     , bswap
+    , bsf
+    , bsr
     , add
     , adc
     , sub

@@ -287,6 +287,8 @@ mkCodeBuilder' = \case
     Mov_ dest src -> op2' 0x44 dest $ noImm (show (dest, src)) src
 
     Cmov_ (Condition c) dest src | size dest /= S8 -> regprefix2 src dest $ codeByte 0x0f <> codeByte (0x40 .|. c) <> reg2x8 dest src
+    Bsf dest src | size dest /= S8 -> regprefix2 src dest $ codeByte 0x0f <> codeByte 0xbc <> reg2x8 dest src
+    Bsr dest src | size dest /= S8 -> regprefix2 src dest $ codeByte 0x0f <> codeByte 0xbd <> reg2x8 dest src
 
     Lea_ dest src | size dest /= S8 -> regprefix2' (resizeOperand' dest src) dest 0x46 $ reg2x8 dest src
       where
@@ -573,6 +575,8 @@ dec a   = mkCodeLine (Dec_ a)
 not_ a  = mkCodeLine (Not_ a)
 neg a   = mkCodeLine (Neg_ a)
 bswap a = mkCodeLine (Bswap a)
+bsf a b = mkCodeLine (Bsf a b)
+bsr a b = mkCodeLine (Bsr a b)
 add a b = mkCodeLine (Add_ a b)
 or_  a b = mkCodeLine (Or_  a b)
 adc a b = mkCodeLine (Adc_ a b)
