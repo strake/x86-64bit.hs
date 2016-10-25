@@ -280,7 +280,7 @@ mkCodeBuilder' = \case
       where
         (dest', src') = if isMemOp src then (src, dest) else (dest, src)
 
-    Mov_ dest@(RegOp r) ((if size dest == S64 then mkImm S32 <> mkImm S64 else mkImm (size dest)) -> FJust ((se, si), im))
+    Mov_ dest@(RegOp r) ((if size dest == S64 then mkImmU S32 <> mkImm S64 else mkImm (size dest)) -> FJust ((se, si), im))
         | (se, si, size dest) /= (True, S32, S64) -> regprefix si dest (oneReg (0x16 .|. indicator (size dest /= S8)) r) im
         | otherwise -> regprefix'' dest 0x63 (reg8 0x0 dest) im
     Mov_ dest@(size -> s) (mkImmNo64 s -> FJust (_, im)) -> regprefix'' dest 0x63 (reg8 0x0 dest) im
@@ -334,7 +334,7 @@ mkCodeBuilder' = \case
     Pop_ dest@(RegOp r) -> regprefix S32 dest (oneReg 0x0b r) mempty
     Pop_ dest -> regprefix S32 dest (codeByte 0x8f <> reg8 0x0 dest) mempty
 
-    Push_ (mkImm S8 -> FJust (_, im))  -> codeByte 0x6a <> im
+    Push_ (mkImmS S8 -> FJust (_, im)) -> codeByte 0x6a <> im
     Push_ (mkImm S32 -> FJust (_, im)) -> codeByte 0x68 <> im
     Push_ dest@(RegOp r) -> regprefix S32 dest (oneReg 0x0a r) mempty
     Push_ dest -> regprefix S32 dest (codeByte 0xff <> reg8 0x6 dest) mempty
@@ -506,9 +506,9 @@ mkCodeBuilder' = \case
         rc (RegOp r) = reg8_ r
 
     op2 :: IsSize s => Word8 -> Operand RW s -> Operand r s -> CodeBuilder
-    op2 op dest@RegA src@(mkImmNo64 (size dest) -> FJust (_, im)) | size dest == S8 || isNothing (getFirst $ mkImm S8 src)
+    op2 op dest@RegA src@(mkImmNo64 (size dest) -> FJust (_, im)) | size dest == S8 || isNothing (getFirst $ mkImmS S8 src)
         = regprefix'' dest (op `shiftL` 2 .|. 0x2) mempty im
-    op2 op dest (mkImm S8 <> mkImmNo64 (size dest) -> FJust ((_, k), im))
+    op2 op dest (mkImmS S8 <> mkImmNo64 (size dest) -> FJust ((_, k), im))
         = regprefix'' dest (0x40 .|. indicator (size dest /= S8 && k == S8)) (reg8 op dest) im
     op2 op dest src = op2' (op `shiftL` 2) dest $ noImm "1" src
 
