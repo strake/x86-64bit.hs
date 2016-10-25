@@ -88,6 +88,7 @@ module CodeGen.X86
     , bswap
     , bsf
     , bsr
+    , bt
     , add
     , adc
     , sub
