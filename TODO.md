@@ -1,4 +1,15 @@
 
+# Instructions DSL
+
+The main problem is typing the instructions in Haskell.
+
+Unsolved problems:
+
+-   How to support instructions with variable arguments (like imul)?
+-   How to support instructions with mixed sized arguments (like bt)?
+-   How to prevent more misuse statically?
+
+
 # Support more instructions
 
 -   pusha / popa ?
