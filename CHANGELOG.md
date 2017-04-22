@@ -1,3 +1,7 @@
+# Version 0.4.5
+
+-   fix build with newer base
+
 # Version 0.4.4
 
 -   export some useful data types 
