@@ -8,8 +8,10 @@ module CodeGen.X86
     , Size (..)
     , HasSize (..)
     , IsSize
+    , EqT (..)
+    , sizeEqCheck
     -- * Registers
-    , Reg , FromReg (..)
+    , Reg (..) , FromReg (..)
     -- ** 64 bit registers
     , rax, rcx, rdx, rbx, rsp, rbp, rsi, rdi, r8, r9, r10, r11, r12, r13, r14, r15
     -- ** 32 bit registers
@@ -62,13 +64,14 @@ module CodeGen.X86
     , align
     , Label
     , label
-    -- ** Control
+    -- ** Control instructions
     , j
     , jmp
     , jmpq
     , call
     , ret
-    -- ** Flags
+    , nop
+    -- ** Flag manipulation
     , cmc
     , clc
     , stc
@@ -78,21 +81,23 @@ module CodeGen.X86
     , std
     , pushf
     , popf
+    -- *** Conditionals
     , cmp
     , test
+    , bt
+    , bsf
+    , bsr
     -- ** Arithmetic
     , inc
     , dec
-    , not_
     , neg
-    , bswap
-    , bsf
-    , bsr
-    , bt
     , add
     , adc
     , sub
     , sbb
+    , lea
+    -- ** Bit manipulation
+    , not_
     , and_
     , or_
     , xor_
@@ -103,9 +108,8 @@ module CodeGen.X86
     , shl
     , shr
     , sar
-    , lea
-    -- ** Other
-    , nop
+    -- ** Byte manipulation/move
+    , bswap
     , xchg
     , mov
     , cmov

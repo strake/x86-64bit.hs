@@ -71,7 +71,7 @@ isHigh _ = False
 
 regs :: IsSize s => Operand r s -> [SReg]
 regs = \case
-    MemOp (Addr r _ i) -> foldMap (pure . SReg) r ++ foldMap (pure . SReg . snd) i
+    MemOp (Addr r _ i) -> foldMap (pure . SReg) r ++ case i of NoIndex -> []; IndexReg _ x -> [SReg x]
     RegOp r -> [SReg r]
     _ -> mempty
 
@@ -480,7 +480,7 @@ mkCodeBuilder' = \case
 
     extbits :: Operand r s -> Word8
     extbits = \case
-        MemOp (Addr b _ i) -> maybe 0 indexReg b .|. maybe 0 ((`shiftL` 1) . indexReg . snd) i
+        MemOp (Addr b _ i) -> maybe 0 indexReg b .|. case i of NoIndex -> 0; IndexReg _ x -> indexReg x `shiftL` 1
         RegOp r -> indexReg r
         _ -> 0
       where

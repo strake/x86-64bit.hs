@@ -110,8 +110,8 @@ genIPBase = pure $ ipRel $ Label 0
 instance Arbitrary (Addr S64) where
     arbitrary = suchThat (Addr <$> base <*> disp <*> index) ok
       where
-        ok (Addr Nothing _ Nothing) = False
-        ok (Addr Nothing _ (Just (sc, _))) = sc == s1
+        ok (Addr Nothing _ NoIndex) = False
+        ok (Addr Nothing _ (IndexReg sc _)) = sc == s1
         ok _ = True
         base = oneof
             [ return Nothing
@@ -393,7 +393,7 @@ instance Arbitrary InstrTest where
                     Disp v -> fromIntegral v
                 rx = resizeOperand $ RegOp x :: Operand RW S64
             return (v, ((leaData rx v >> mov helper (fromIntegral d') >> sub rx helper >> setvi) >>))
-        mkVal helper o@(MemOp (Addr Nothing d (Just (sc, x)))) = do
+        mkVal helper o@(MemOp (Addr Nothing d (IndexReg sc x))) = do
             v <- arbVal $ size o
             let
                 d' = case d of

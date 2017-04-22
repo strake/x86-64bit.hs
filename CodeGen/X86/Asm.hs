@@ -63,11 +63,12 @@ instance HasBytes Int64 where toBytes w = toBytes (fromIntegral w :: Word64)
 ------------------------------------------------------- sizes
 
 -- | The size of a register (in bits)
-data Size = S8 | S16 | S32 | S64 | S128
+data Size = S1 | S8 | S16 | S32 | S64 | S128
     deriving (Eq, Ord)
 
 instance Show Size where
     show = \case
+        S1   -> "bit"
         S8   -> "byte"
         S16  -> "word"
         S32  -> "dword"
@@ -100,6 +101,7 @@ instance HasSize Int64  where size _ = S64
 
 -- | Singleton type for size
 data SSize (s :: Size) where
+    SSize1   :: SSize S1
     SSize8   :: SSize S8
     SSize16  :: SSize S16
     SSize32  :: SSize S32
@@ -108,6 +110,7 @@ data SSize (s :: Size) where
 
 instance HasSize (SSize s) where
     size = \case
+        SSize1   -> S1
         SSize8   -> S8
         SSize16  -> S16
         SSize32  -> S32
@@ -117,6 +120,7 @@ instance HasSize (SSize s) where
 class IsSize (s :: Size) where
     ssize :: SSize s
 
+instance IsSize S1   where ssize = SSize1
 instance IsSize S8   where ssize = SSize8
 instance IsSize S16  where ssize = SSize16
 instance IsSize S32  where ssize = SSize32
@@ -220,14 +224,12 @@ data Addr s = Addr
     deriving (Eq)
 
 type BaseReg s    = Maybe (Reg s)
-type IndexReg s   = Maybe (Scale, Reg s)
+data IndexReg s   = NoIndex | IndexReg Scale (Reg s)
+    deriving (Eq)
 type Displacement = Maybe Int32
 
 pattern NoDisp = Nothing
 pattern Disp a = Just a
-
-pattern NoIndex = Nothing
-pattern IndexReg a b = Just (a, b)
 
 -- | intruction pointer (RIP) relative address
 ipRel :: Label -> Operand rw s
@@ -315,8 +317,8 @@ instance (rw ~ R) => Num (Operand rw s) where
     signum = error "signum @Operand"
 
 instance Monoid (Addr s) where
-    mempty = Addr (getFirst mempty) (getFirst mempty) (getFirst mempty)
-    Addr a b c `mappend` Addr a' b' c' = Addr (getFirst $ First a <> First a') (getFirst $ First b <> First b') (getFirst $ First c <> First c')
+    mempty = Addr (getFirst mempty) (getFirst mempty) mempty
+    Addr a b c `mappend` Addr a' b' c' = Addr (getFirst $ First a <> First a') (getFirst $ First b <> First b') (c <> c')
 
 instance Monoid (IndexReg s) where
     mempty = NoIndex
