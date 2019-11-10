@@ -316,14 +316,18 @@ instance (rw ~ R) => Num (Operand rw s) where
     abs = error "abs @Operand"
     signum = error "signum @Operand"
 
+instance Semigroup (Addr s) where
+    Addr a b c <> Addr a' b' c' = Addr (getFirst $ First a <> First a') (getFirst $ First b <> First b') (c <> c')
+
 instance Monoid (Addr s) where
     mempty = Addr (getFirst mempty) (getFirst mempty) mempty
-    Addr a b c `mappend` Addr a' b' c' = Addr (getFirst $ First a <> First a') (getFirst $ First b <> First b') (c <> c')
+
+instance Semigroup (IndexReg s) where
+    i <> NoIndex = i
+    NoIndex <> i = i
 
 instance Monoid (IndexReg s) where
     mempty = NoIndex
-    i `mappend` NoIndex = i
-    NoIndex `mappend` i = i
 
 base :: Reg s -> Addr s
 base x = Addr (Just x) NoDisp NoIndex

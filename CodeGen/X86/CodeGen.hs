@@ -98,9 +98,11 @@ codeBuilderLength (CodeBuilder a b _) | a == b = a
 
 type LabelState = [[(Size, Int, Int)]]
 
+instance Semigroup CodeBuilder where
+    CodeBuilder mi ma a <> CodeBuilder mi' ma' b = CodeBuilder (min mi mi') (max ma ma') $ a >> b
+
 instance Monoid CodeBuilder where
     mempty = CodeBuilder 0 0 $ return ()
-    CodeBuilder mi ma a `mappend` CodeBuilder mi' ma' b = CodeBuilder (min mi mi') (max ma ma') $ a >> b
 
 codeBytes :: [Word8] -> CodeBuilder
 codeBytes bs = CodeBuilder n n $ do
@@ -556,9 +558,11 @@ data LCode where
     AppendCode  :: CodeBuilder -> LCode -> LCode -> LCode
     CodeLine    :: CodeBuilder -> CodeLine -> LCode
 
+instance Semigroup LCode where
+    a <> b = AppendCode (mkCodeBuilder a <> mkCodeBuilder b) a b
+
 instance Monoid LCode where
     mempty  = EmptyCode
-    mappend a b = AppendCode (mkCodeBuilder a <> mkCodeBuilder b) a b
 
 ret     = mkCodeLine Ret_
 nop     = mkCodeLine Nop_
