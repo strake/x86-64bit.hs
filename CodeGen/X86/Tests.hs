@@ -23,6 +23,7 @@ import Data.Maybe
 import Data.List
 import Data.Bits
 import Data.Int
+import Data.Type.Equality ((:~:) (..))
 import Data.Word
 
 import Test.QuickCheck hiding ((.&.), label)

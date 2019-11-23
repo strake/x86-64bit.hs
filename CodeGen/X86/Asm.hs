@@ -3,6 +3,7 @@
 {-# language ViewPatterns #-}
 {-# language PatternGuards #-}
 {-# language PatternSynonyms #-}
+{-# language TypeOperators #-}
 {-# language NoMonomorphismRestriction #-}
 {-# language ScopedTypeVariables #-}
 {-# language RankNTypes #-}
@@ -27,6 +28,7 @@ import Control.Arrow
 import Control.Monad.Reader
 import Control.Monad.Writer
 import Control.Monad.State
+import Data.Type.Equality ((:~:) (..))
 
 ------------------------------------------------------- utils
 
@@ -127,10 +129,7 @@ instance IsSize S32  where ssize = SSize32
 instance IsSize S64  where ssize = SSize64
 instance IsSize S128 where ssize = SSize128
 
-data EqT s s' where
-    Refl :: EqT s s
-
-sizeEqCheck :: forall s s' f g . (IsSize s, IsSize s') => f s -> g s' -> Maybe (EqT s s')
+sizeEqCheck :: forall s s' f g . (IsSize s, IsSize s') => f s -> g s' -> Maybe (s :~: s')
 sizeEqCheck _ _ = case (ssize :: SSize s, ssize :: SSize s') of
     (SSize8 , SSize8)  -> Just Refl
     (SSize16, SSize16) -> Just Refl

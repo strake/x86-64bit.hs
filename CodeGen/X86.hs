@@ -8,7 +8,6 @@ module CodeGen.X86
     , Size (..)
     , HasSize (..)
     , IsSize
-    , EqT (..)
     , sizeEqCheck
     -- * Registers
     , Reg (..) , FromReg (..)
