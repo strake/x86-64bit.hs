@@ -157,8 +157,6 @@ module CodeGen.X86
     , printf
     , hsPtr
     , CString (..)
-    -- * Misc
-    , runTests
     ) where
 
 import Data.Monoid
@@ -168,5 +166,4 @@ import CodeGen.X86.CodeGen
 import CodeGen.X86.FFI
 import CodeGen.X86.CallConv
 import CodeGen.X86.Utils
-import CodeGen.X86.Tests
 
